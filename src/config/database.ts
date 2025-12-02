@@ -115,9 +115,8 @@ export const connectDatabase = async (): Promise<void> => {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully');
 
-    // Sync models in development
     if (process.env.APP_ENV === 'development') {
-      // await squelize.sync({ alter: true });
+      await sequelize.sync(); // or sync({ alter: true })
       console.log('📊 Database models synchronized');
     }
   } catch (error) {
@@ -125,6 +124,7 @@ export const connectDatabase = async (): Promise<void> => {
     process.exit(1);
   }
 };
+
 
 // For Sequelize CLI - removed to avoid overwriting ES6 exports
 // If you need this for Sequelize CLI, create a separate .sequelizerc file
