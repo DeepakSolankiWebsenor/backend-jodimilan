@@ -5,6 +5,7 @@ import { ResponseHelper } from '../../utils/response';
 import { EncryptionService } from '../../utils/encryption';
 import { asyncHandler } from '../../middlewares/errorHandler';
 import { User } from '../../models';
+import { initDatabase } from '../../utils/initDatabase';
 
 export class AuthController {
   /**
@@ -33,6 +34,7 @@ static signup = asyncHandler(async (req: AuthRequest, res: Response) => {
    * POST /api/auth/login - Login with email/phone/ryt_id and password
    */
  static login = asyncHandler(async (req: AuthRequest, res: Response) => {
+   await initDatabase(); // 👈 REQUIRED FOR SERVERLESS
   const { email, phone, ryt_id, password, dialing_code } = req.body;
   const identifier = email || phone || ryt_id;
 
