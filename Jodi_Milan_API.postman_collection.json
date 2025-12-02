@@ -1,0 +1,1606 @@
+{
+  "info": {
+    "name": "Jodi Milan API",
+    "description": "Complete API collection for Jodi Milan Matrimonial Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "jodimilan-api"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3006/api",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email and password"
+          }
+        },
+        {
+          "name": "Login with OTP",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"dialing_code\": \"+91\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/otp/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "otp", "login"]
+            },
+            "description": "Login using OTP"
+          }
+        },
+        {
+          "name": "Signup",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"1234567890\",\n  \"dialing_code\": \"+91\",\n  \"profile_by\": \"Self\",\n  \"gender\": \"Male\",\n  \"mat_status\": \"Unmarried\",\n  \"religion\": 1,\n  \"caste\": 1,\n  \"dob\": \"1990-01-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "signup"]
+            },
+            "description": "Create a new user account"
+          }
+        },
+        {
+          "name": "Create OTP",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"dialing_code\": \"+91\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/create/otp",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "create", "otp"]
+            },
+            "description": "Generate OTP for phone verification"
+          }
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"dialing_code\": \"+91\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/resend/otp",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "resend", "otp"]
+            },
+            "description": "Resend OTP"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request password reset"
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/userMailVerified/:id",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "userMailVerified", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Verify user email"
+          }
+        },
+        {
+          "name": "Verify Phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verify-phone",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "verify-phone"]
+            },
+            "description": "Verify phone with OTP (requires authentication)"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout current user"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/user",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "user"]
+            },
+            "description": "Get authenticated user details"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"oldpass123\",\n  \"new_password\": \"newpass123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "change-password"]
+            },
+            "description": "Change user password"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"last_name\": \"Updated LastName\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/updateProfile",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "updateProfile"]
+            },
+            "description": "Update user profile"
+          }
+        },
+        {
+          "name": "Update Profile Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": \"name\",\n  \"value\": \"New Name\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/profileFieldUpdate",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "profileFieldUpdate"]
+            },
+            "description": "Update specific profile field"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verifyOtp",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "verifyOtp"]
+            },
+            "description": "Verify OTP"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Profile",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile"]
+            },
+            "description": "Get authenticated user's profile"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gothra\": \"Brahmin\",\n  \"moon_sign\": \"Leo\",\n  \"manglik\": \"Yes\",\n  \"height\": \"5.8\",\n  \"educations\": \"MBA\",\n  \"occupation\": \"Software Engineer\",\n  \"annual_income\": \"10-15 LPA\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/profile/update",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile", "update"]
+            },
+            "description": "Update user profile details"
+          }
+        },
+        {
+          "name": "Update Partner Preferences",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"age_from\": 25,\n  \"age_to\": 35,\n  \"height_from\": \"5.0\",\n  \"height_to\": \"6.0\",\n  \"marital_status\": [\"Unmarried\"],\n  \"religion\": [1, 2],\n  \"caste\": [1, 2, 3]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/profile/update-partner-preferences",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile", "update-partner-preferences"]
+            },
+            "description": "Update partner preferences"
+          }
+        },
+        {
+          "name": "Get Current Plan",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/currrent-plan",
+              "host": ["{{base_url}}"],
+              "path": ["user", "currrent-plan"]
+            },
+            "description": "Get user's current subscription plan"
+          }
+        },
+        {
+          "name": "Get Profile By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/profileById/:id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profileById", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get profile details by user ID"
+          }
+        },
+        {
+          "name": "View Contact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/view-contact/:id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "view-contact", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "View contact details of a profile"
+          }
+        },
+        {
+          "name": "Upload Album Images",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "caption",
+                  "value": "My photo",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/user/album/images/upload",
+              "host": ["{{base_url}}"],
+              "path": ["user", "album", "images", "upload"]
+            },
+            "description": "Upload multiple album images (max 10)"
+          }
+        },
+        {
+          "name": "Delete Album Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/album/images/delete/:id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "album", "images", "delete", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Delete album image by ID"
+          }
+        },
+        {
+          "name": "Remove Profile Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/profile/image/remove",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile", "image", "remove"]
+            },
+            "description": "Remove profile image"
+          }
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Not interested anymore\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/delete/account",
+              "host": ["{{base_url}}"],
+              "path": ["user", "delete", "account"]
+            },
+            "description": "Delete user account"
+          }
+        },
+        {
+          "name": "Browse Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/browseProfile?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["user", "browseProfile"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Browse available profiles"
+          }
+        },
+        {
+          "name": "Daily Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/daily/recommendation/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "daily", "recommendation", "profile"]
+            },
+            "description": "Get daily profile recommendations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wishlist",
+      "item": [
+        {
+          "name": "Get Wishlist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/wishlist",
+              "host": ["{{base_url}}"],
+              "path": ["user", "wishlist"]
+            },
+            "description": "Get user's wishlist"
+          }
+        },
+        {
+          "name": "Add to Wishlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/add/wishlist",
+              "host": ["{{base_url}}"],
+              "path": ["user", "add", "wishlist"]
+            },
+            "description": "Add profile to wishlist"
+          }
+        },
+        {
+          "name": "Remove from Wishlist",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/remove/wishlist/:id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "remove", "wishlist", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Remove profile from wishlist"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Block Profiles",
+      "item": [
+        {
+          "name": "Block Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"blocked_user_id\": 1,\n  \"reason\": \"Inappropriate behavior\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/block/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "block", "profile"]
+            },
+            "description": "Block a user profile"
+          }
+        },
+        {
+          "name": "Get Blocked Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/block/profile/user",
+              "host": ["{{base_url}}"],
+              "path": ["user", "block", "profile", "user"]
+            },
+            "description": "Get list of blocked profiles"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Friend Requests",
+      "item": [
+        {
+          "name": "Send Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_id\": 1,\n  \"message\": \"Hi, I would like to connect with you\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/friend/request/send",
+              "host": ["{{base_url}}"],
+              "path": ["user", "friend", "request", "send"]
+            },
+            "description": "Send friend request to a user"
+          }
+        },
+        {
+          "name": "Get Received Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/auth/user/friend/requests",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "user", "friend", "requests"]
+            },
+            "description": "Get received friend requests"
+          }
+        },
+        {
+          "name": "Accept Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"request_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/friend/requests/accept",
+              "host": ["{{base_url}}"],
+              "path": ["user", "friend", "requests", "accept"]
+            },
+            "description": "Accept friend request"
+          }
+        },
+        {
+          "name": "Get Accepted Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/friend/requests/accepted",
+              "host": ["{{base_url}}"],
+              "path": ["user", "friend", "requests", "accepted"]
+            },
+            "description": "Get accepted friend requests"
+          }
+        },
+        {
+          "name": "Get Pending Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/friend/requests/pending",
+              "host": ["{{base_url}}"],
+              "path": ["user", "friend", "requests", "pending"]
+            },
+            "description": "Get pending friend requests"
+          }
+        },
+        {
+          "name": "Decline Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"request_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/friend/requests/decline",
+              "host": ["{{base_url}}"],
+              "path": ["user", "friend", "requests", "decline"]
+            },
+            "description": "Decline friend request"
+          }
+        },
+        {
+          "name": "Send Photo Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_id\": 1,\n  \"message\": \"Can I view your photos?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/photo/request/send",
+              "host": ["{{base_url}}"],
+              "path": ["user", "photo", "request", "send"]
+            },
+            "description": "Send photo viewing request"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["user", "notifications"]
+            },
+            "description": "Get all notifications for authenticated user"
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/readnotifications/:id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "readnotifications", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Mark notification as read"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OTP & Firebase",
+      "item": [
+        {
+          "name": "Create OTP (User)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/create/otp",
+              "host": ["{{base_url}}"],
+              "path": ["user", "create", "otp"]
+            },
+            "description": "Create OTP for authenticated user"
+          }
+        },
+        {
+          "name": "Create OTP for Email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/create/otp/email",
+              "host": ["{{base_url}}"],
+              "path": ["user", "create", "otp", "email"]
+            },
+            "description": "Create OTP for email verification"
+          }
+        },
+        {
+          "name": "Subscribe to Firebase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"firebase_device_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/subscribe",
+              "host": ["{{base_url}}"],
+              "path": ["user", "subscribe"]
+            },
+            "description": "Subscribe to Firebase notifications"
+          }
+        },
+        {
+          "name": "Unsubscribe from Firebase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"firebase_device_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/unsubscribe",
+              "host": ["{{base_url}}"],
+              "path": ["user", "unsubscribe"]
+            },
+            "description": "Unsubscribe from Firebase notifications"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"package_id\": 1,\n  \"amount\": 999,\n  \"duration\": \"3 months\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/order/create",
+              "host": ["{{base_url}}"],
+              "path": ["user", "order", "create"]
+            },
+            "description": "Create new order"
+          }
+        },
+        {
+          "name": "Checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": 1,\n  \"payment_method\": \"razorpay\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/order/Checkout",
+              "host": ["{{base_url}}"],
+              "path": ["user", "order", "Checkout"]
+            },
+            "description": "Checkout order"
+          }
+        },
+        {
+          "name": "Get Order History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/order/history",
+              "host": ["{{base_url}}"],
+              "path": ["user", "order", "history"]
+            },
+            "description": "Get user's order history"
+          }
+        },
+        {
+          "name": "Subscribe Package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"package_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/plansuscribe",
+              "host": ["{{base_url}}"],
+              "path": ["user", "plansuscribe"]
+            },
+            "description": "Subscribe to a package"
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/My-Orders",
+              "host": ["{{base_url}}"],
+              "path": ["My-Orders"]
+            },
+            "description": "Get all orders for authenticated user"
+          }
+        },
+        {
+          "name": "Get Order By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/OrderByid/:id",
+              "host": ["{{base_url}}"],
+              "path": ["OrderByid", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get order details by ID"
+          }
+        },
+        {
+          "name": "Change Order Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": 1,\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/Order-Status-change",
+              "host": ["{{base_url}}"],
+              "path": ["Order-Status-change"]
+            },
+            "description": "Change order status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Razorpay Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999,\n  \"package_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/razorpay-create-order",
+              "host": ["{{base_url}}"],
+              "path": ["user", "razorpay-create-order"]
+            },
+            "description": "Create Razorpay payment order"
+          }
+        },
+        {
+          "name": "Verify Razorpay Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"order_xxx\",\n  \"razorpay_payment_id\": \"pay_xxx\",\n  \"razorpay_signature\": \"signature_xxx\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/razorpay-verify-payment",
+              "host": ["{{base_url}}"],
+              "path": ["user", "razorpay-verify-payment"]
+            },
+            "description": "Verify Razorpay payment"
+          }
+        },
+        {
+          "name": "Create CCAvenue Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999,\n  \"package_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/cc-avenue-create-order",
+              "host": ["{{base_url}}"],
+              "path": ["user", "cc-avenue-create-order"]
+            },
+            "description": "Create CCAvenue payment order"
+          }
+        },
+        {
+          "name": "Razorpay Callback",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/razorpay-callback",
+              "host": ["{{base_url}}"],
+              "path": ["razorpay-callback"]
+            },
+            "description": "Razorpay payment callback (public)"
+          }
+        },
+        {
+          "name": "Get Payment Gateways",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payment-gateway",
+              "host": ["{{base_url}}"],
+              "path": ["payment-gateway"]
+            },
+            "description": "Get available payment gateways (public)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/session/create",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", "create"]
+            },
+            "description": "Create new chat session"
+          }
+        },
+        {
+          "name": "Get Friends",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/getFriends",
+              "host": ["{{base_url}}"],
+              "path": ["user", "getFriends"]
+            },
+            "description": "Get list of friends for chat"
+          }
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/session/:session/chats",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", ":session", "chats"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Get messages for a session"
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello, how are you?\",\n  \"type\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/user/send/:session",
+              "host": ["{{base_url}}"],
+              "path": ["user", "send", ":session"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Send message in a session"
+          }
+        },
+        {
+          "name": "Mark as Read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/session/:session/read",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", ":session", "read"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Mark messages as read"
+          }
+        },
+        {
+          "name": "Clear Chat",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/session/:session/clear",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", ":session", "clear"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Clear chat history"
+          }
+        },
+        {
+          "name": "Block User in Chat",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/session/:session/block",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", ":session", "block"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Block user in chat session"
+          }
+        },
+        {
+          "name": "Unblock User in Chat",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/session/:session/unblock",
+              "host": ["{{base_url}}"],
+              "path": ["user", "session", ":session", "unblock"],
+              "variable": [
+                {
+                  "key": "session",
+                  "value": "session_id_here"
+                }
+              ]
+            },
+            "description": "Unblock user in chat session"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Common (Public)",
+      "item": [
+        {
+          "name": "Get Home Data",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/home",
+              "host": ["{{base_url}}"],
+              "path": ["home"]
+            },
+            "description": "Get home page data"
+          }
+        },
+        {
+          "name": "Get Config",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["config"]
+            },
+            "description": "Get app configuration"
+          }
+        },
+        {
+          "name": "Get Phone Codes",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/phone-codes",
+              "host": ["{{base_url}}"],
+              "path": ["phone-codes"]
+            },
+            "description": "Get country phone codes"
+          }
+        },
+        {
+          "name": "Get All CMS",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/cms",
+              "host": ["{{base_url}}"],
+              "path": ["cms"]
+            },
+            "description": "Get all CMS pages"
+          }
+        },
+        {
+          "name": "Get CMS Page",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/cms/:cms_type/:category_id?",
+              "host": ["{{base_url}}"],
+              "path": ["cms", ":cms_type", ":category_id?"],
+              "variable": [
+                {
+                  "key": "cms_type",
+                  "value": "about-us"
+                },
+                {
+                  "key": "category_id?",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get specific CMS page"
+          }
+        },
+        {
+          "name": "Get User By ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/userById/:id",
+              "host": ["{{base_url}}"],
+              "path": ["userById", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get user details by ID (public)"
+          }
+        },
+        {
+          "name": "Get States",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/state/:country_code",
+              "host": ["{{base_url}}"],
+              "path": ["user", "state", ":country_code"],
+              "variable": [
+                {
+                  "key": "country_code",
+                  "value": "IN"
+                }
+              ]
+            },
+            "description": "Get states by country code"
+          }
+        },
+        {
+          "name": "Get Cities",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/city/:state_id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "city", ":state_id"],
+              "variable": [
+                {
+                  "key": "state_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get cities by state ID"
+          }
+        },
+        {
+          "name": "Get Areas",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/area/:city_id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "area", ":city_id"],
+              "variable": [
+                {
+                  "key": "city_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get areas by city ID"
+          }
+        },
+        {
+          "name": "Get Banners",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/slider",
+              "host": ["{{base_url}}"],
+              "path": ["user", "slider"]
+            },
+            "description": "Get banner sliders"
+          }
+        },
+        {
+          "name": "Get Common Options",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/common-options",
+              "host": ["{{base_url}}"],
+              "path": ["user", "common-options"]
+            },
+            "description": "Get common options (religion, caste, etc.)"
+          }
+        },
+        {
+          "name": "Get Packages",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/packages",
+              "host": ["{{base_url}}"],
+              "path": ["user", "packages"]
+            },
+            "description": "Get subscription packages"
+          }
+        },
+        {
+          "name": "Search Profiles",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/customer/search?gender=Female&age_from=25&age_to=35",
+              "host": ["{{base_url}}"],
+              "path": ["user", "customer", "search"],
+              "query": [
+                {
+                  "key": "gender",
+                  "value": "Female"
+                },
+                {
+                  "key": "age_from",
+                  "value": "25"
+                },
+                {
+                  "key": "age_to",
+                  "value": "35"
+                }
+              ]
+            },
+            "description": "Search profiles (public)"
+          }
+        },
+        {
+          "name": "Search By RYT ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/serachById?ryt_id=RYT123456",
+              "host": ["{{base_url}}"],
+              "path": ["user", "serachById"],
+              "query": [
+                {
+                  "key": "ryt_id",
+                  "value": "RYT123456"
+                }
+              ]
+            },
+            "description": "Search profile by RYT ID"
+          }
+        }
+      ]
+    }
+  ]
+}
