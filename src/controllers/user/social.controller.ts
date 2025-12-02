@@ -96,7 +96,7 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
     // 1️⃣ Try SMS (but do not break if fails)
     try {
       await SmsService.sendFriendAccepted(phone, acceptor.name, acceptor.ryt_id || '');
-    } catch (e) {
+    } catch (e:any) {
       console.error("❌ SMS sending failed:", e?.message);
     }
 
@@ -107,7 +107,7 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
         'Friend Request Accepted',
         `${acceptor.name} accepted your friend request`
       );
-    } catch (e) {
+    } catch (e:any) {
       console.error("❌ Firebase notification failed:", e?.message);
     }
 

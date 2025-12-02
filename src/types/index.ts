@@ -1,11 +1,20 @@
-import { Request } from 'express';
 
 
-// OTP Verification Request Body
-export interface VerifyEmailOtpDTO {
-  email: string;
-  otp: string;
+import { Request } from 'express-serve-static-core';
+
+export interface VerifyEmailOtpRequest extends Request {
+  body: {
+    email: string;
+    otp: string;
+  };
 }
+
+export interface ResendOtpRequest extends Request {
+  body: {
+    email: string;
+  };
+}
+
 
 
 // User types matching Laravel enums

@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { AuthRequest,VerifyEmailOtpDTO } from '../../types';
+import { AuthRequest,VerifyEmailOtpRequest,ResendOtpRequest, } from '../../types';
 import { AuthService } from '../../services/auth.service';
 import { ResponseHelper } from '../../utils/response';
 import { EncryptionService } from '../../utils/encryption';
@@ -157,7 +157,10 @@ static changePassword = asyncHandler(async (req: AuthRequest, res: Response) => 
   /**
    * GET /api/auth/userMailVerified/:id - Email verification callback
    */
-static verifyEmail = asyncHandler(async (req: Request, res: Response) => {
+static verifyEmail = asyncHandler(async (
+  req: VerifyEmailOtpRequest, // 👈 Use the custom request type
+  res: Response
+) => {
   const { email, otp } = req.body;
 
   console.log("🔥 Email Verification Request =>", req.body);
@@ -177,7 +180,11 @@ static verifyEmail = asyncHandler(async (req: Request, res: Response) => {
 });
 
 
-static resendEmailOtp = asyncHandler(async (req: Request, res: Response) => {
+
+static resendEmailOtp = asyncHandler(async (
+  req: ResendOtpRequest,
+  res: Response
+) => {
   const { email } = req.body;
 
   console.log("🔁 Resend OTP request =>", req.body);
