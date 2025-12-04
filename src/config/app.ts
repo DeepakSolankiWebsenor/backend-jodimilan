@@ -7,7 +7,8 @@ export const config = {
     name: process.env.APP_NAME || 'Jodi_Milan',
     env: process.env.APP_ENV || 'development',
     port: parseInt(process.env.APP_PORT || '3001', 10),
-    url: process.env.APP_URL || 'http://localhost:3001',
+  url: process.env.APP_URL || `http://localhost:${process.env.PORT || 3001}`,
+
   },
   database: {
     host: process.env.DB_HOST || '127.0.0.1',

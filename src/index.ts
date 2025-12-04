@@ -6,7 +6,8 @@ import { initializeFirebase } from './utils/firebase';
 import { createServer } from 'http';
 import { initializeSocketServer } from './socket';
 
-const PORT = config.app.port;
+const PORT = process.env.PORT || config.app.port || 3000;
+
 
 // Start server
 const startServer = async () => {
