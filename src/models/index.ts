@@ -19,6 +19,7 @@ export * from './PaymentOrder';
 export * from './PackagePayment';
 export * from './Session';
 export * from './Chat';
+export * from './UserPresence';
 export * from './Notification';
 export * from './Category';
 export * from './Banner';

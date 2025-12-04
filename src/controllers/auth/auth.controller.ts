@@ -34,7 +34,6 @@ static signup = asyncHandler(async (req: AuthRequest, res: Response) => {
    * POST /api/auth/login - Login with email/phone/ryt_id and password
    */
  static login = asyncHandler(async (req: AuthRequest, res: Response) => {
-   await initDatabase(); // 👈 REQUIRED FOR SERVERLESS
   const { email, phone, ryt_id, password, dialing_code } = req.body;
   const identifier = email || phone || ryt_id;
 
@@ -47,6 +46,19 @@ static signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   }
 
   const result = await AuthService.login(identifier, password, dialing_code);
+  
+  // If login successful, get full user data
+  if (result.code === 200 && (result.data as any)?.user_id) {
+    const userId = (result.data as any).user_id;
+    const user = await User.findByPk(userId, {
+      attributes: { exclude: ['password', 'otp', 'user_password'] },
+    });
+    
+    if (user) {
+      // Add full user data to response (overwrite encrypted string)
+      (result.data as any).user = user.toJSON();
+    }
+  }
 
   return res.status(result.code).json(result);
 });

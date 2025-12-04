@@ -18,6 +18,22 @@ export class Session extends Model {
   @Column({ type: DataType.JSON, allowNull: true, comment: 'Block data {user_id: true/false}' })
   block?: any;
 
+  // Last message tracking for chat list preview
+  @ForeignKey(() => Chat)
+  @Column({ type: DataType.BIGINT, allowNull: true, comment: 'ID of last message in session' })
+  last_message_id?: number;
+
+  @Column({ type: DataType.DATE, allowNull: true, comment: 'Timestamp of last message' })
+  last_message_at?: Date;
+
+  // Typing indicators
+  @Column({ 
+    type: DataType.JSON, 
+    allowNull: true, 
+    comment: 'Users currently typing: {user_id: timestamp}' 
+  })
+  typing_users?: Record<string, number>;
+
   @BelongsTo(() => User, 'user1_id')
   user1!: User;
 
@@ -26,4 +42,7 @@ export class Session extends Model {
 
   @HasMany(() => Chat)
   chats!: Chat[];
+
+  @BelongsTo(() => Chat, 'last_message_id')
+  lastMessage?: Chat;
 }

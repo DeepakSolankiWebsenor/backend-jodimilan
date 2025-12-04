@@ -4,6 +4,7 @@ import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
 import { Session, Chat, User } from '../../models';
 import { Op } from 'sequelize';
+import { getSocketServer } from '../../socket';
 
 export class ChatController {
   // POST /api/user/session/create - Create or get chat session
@@ -36,10 +37,68 @@ export class ChatController {
       where: {
         [Op.or]: [{ user1_id: req.userId! }, { user2_id: req.userId! }],
       },
-      include: ['user1', 'user2'],
+      include: [
+        'user1', 
+        'user2',
+        {
+          model: Chat,
+          as: 'lastMessage',
+          required: false,
+        },
+      ],
+      order: [['last_message_at', 'DESC']],
     });
 
-    return ResponseHelper.success(res, 'Friends retrieved', sessions);
+    // Format response with only friend data (not current user)
+    const friendsList = await Promise.all(
+      sessions.map(async (session) => {
+        const sessionData = session.toJSON() as any;
+        
+        // Determine which user is the friend (not the current user)
+        // If current user is user1, then friend is user2
+        // If current user is user2, then friend is user1
+        const friendUser = sessionData.user1_id === req.userId! 
+          ? sessionData.user2   // Current user is user1, so friend is user2
+          : sessionData.user1;  // Current user is user2, so friend is user1
+        
+        console.log('DEBUG - Session:', {
+          sessionId: sessionData.id,
+          user1_id: sessionData.user1_id,
+          user1_name: sessionData.user1?.name,
+          user2_id: sessionData.user2_id,
+          user2_name: sessionData.user2?.name,
+          currentUserId: req.userId,
+          selectedFriendId: friendUser?.id,
+          selectedFriendName: friendUser?.name
+        });
+        
+        const unreadCount = await Chat.count({
+          where: {
+            session_id: session.id,
+            to_user_id: req.userId!,
+            is_read: false,
+          },
+        });
+
+        return {
+          id: sessionData.id,
+          user1_id: sessionData.user1_id,
+          user2_id: sessionData.user2_id,
+          block: sessionData.block,
+          last_message_id: sessionData.last_message_id,
+          last_message_at: sessionData.last_message_at,
+          typing_users: sessionData.typing_users,
+          created_at: sessionData.created_at,
+          updated_at: sessionData.updated_at,
+          lastMessage: sessionData.lastMessage,
+          unreadCount,
+          // Only include the friend's user data
+          friend: friendUser,
+        };
+      })
+    );
+
+    return ResponseHelper.success(res, 'Friends retrieved', friendsList);
   });
 
   // POST /api/user/session/:session/chats - Get chat messages
@@ -61,7 +120,8 @@ export class ChatController {
   // POST /api/user/send/:session - Send message
   static sendMessage = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { session } = req.params;
-    const { message, message_type = 'text' } = req.body;
+    const { message, message_type = 'text', reply_to } = req.body;
+    console.log("BODY:", req.body);
 
     const sessionData = await Session.findByPk(session);
     if (!sessionData) {
@@ -77,21 +137,79 @@ export class ChatController {
       message,
       message_type,
       is_read: false,
+      status: 'sent',
+      reply_to: reply_to || undefined,
     });
 
-    return ResponseHelper.success(res, 'Message sent', chat);
+    // Update session last message
+    sessionData.last_message_id = chat.id;
+    sessionData.last_message_at = new Date();
+    await sessionData.save();
+
+    // Fetch complete message with relations
+    const completeMessage = await Chat.findByPk(chat.id, {
+      include: ['fromUser', 'toUser', 'replyToMessage'],
+    });
+
+    // Emit real-time event via Socket.IO - ONLY to recipient, not sender
+    const socketServer = getSocketServer();
+    if (socketServer) {
+      const messageData = {
+        ...completeMessage?.toJSON(),
+        session_id: Number(session),
+      };
+      
+      console.log('📤 Emitting message:new to session:', session, 'Message ID:', chat.id);
+      
+      // Emit to the entire session room (both users will receive it)
+      // Frontend will filter out sender's own message
+      socketServer.getIO().to(`session:${session}`).emit('message:new', messageData);
+    }
+
+    return ResponseHelper.success(res, 'Message sent', completeMessage);
   });
 
   // POST /api/user/session/:session/read - Mark messages as read
   static markAsRead = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { session } = req.params;
 
-    await Chat.update(
-      { is_read: true },
-      { where: { session_id: session, to_user_id: req.userId!, is_read: false } }
+    const readAt = new Date();
+
+    // Update all unread messages where current user is the recipient
+    const [updatedCount] = await Chat.update(
+      { 
+        is_read: true,
+        status: 'read',
+        read_at: readAt,
+      },
+      { 
+        where: { 
+          session_id: session, 
+          to_user_id: req.userId!, 
+          is_read: false 
+        } 
+      }
     );
 
-    return ResponseHelper.success(res, 'Messages marked as read');
+    console.log(`📖 Marked ${updatedCount} messages as read in session ${session} for user ${req.userId}`);
+
+    // Emit read receipt via Socket.IO to notify the sender
+    if (updatedCount > 0) {
+      const socketServer = getSocketServer();
+      if (socketServer) {
+        const readReceiptData = {
+          sessionId: Number(session),
+          userId: req.userId!,
+          readAt: readAt,
+        };
+        
+        console.log('📤 Emitting messages:read event:', readReceiptData);
+        
+        socketServer.getIO().to(`session:${session}`).emit('messages:read', readReceiptData);
+      }
+    }
+
+    return ResponseHelper.success(res, 'Messages marked as read', { updatedCount });
   });
 
   // POST /api/user/session/:session/clear - Clear chat

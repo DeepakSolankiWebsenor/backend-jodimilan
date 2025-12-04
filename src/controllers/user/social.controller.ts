@@ -2,10 +2,11 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { FriendRequest, User, Notification } from '../../models';
+import { FriendRequest, User, Notification,Session } from '../../models';
 import { SmsService } from '../../utils/sms';
 import { FirebaseService } from '../../utils/firebase';
 import { Helper } from '../../utils/helper';
+import { Op } from "sequelize";
 
 export class SocialController {
   // POST /api/user/friend/request/send - Send friend request
@@ -87,34 +88,32 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
   friendRequest.status = 'Yes';
   await friendRequest.save();
 
-  const acceptor = await User.findByPk(req.userId!);
-  const sender = await User.findByPk(friendRequest.user_id);
+  const userA = await User.findByPk(req.userId!); // Accepting user
+  const userB = await User.findByPk(friendRequest.user_id); // Sender user
 
-  if (acceptor && sender) {
-    const phone = Helper.formatPhoneNumber(sender.dialing_code, sender.phone);
+  // ✔ Only run next logic if both users found
+  if (userA && userB) {
+    const phone = Helper.formatPhoneNumber(userB.dialing_code, userB.phone);
 
-    // 1️⃣ Try SMS (but do not break if fails)
-    try {
-      await SmsService.sendFriendAccepted(phone, acceptor.name, acceptor.ryt_id || '');
-    } catch (e:any) {
-      console.error("❌ SMS sending failed:", e?.message);
+    try { 
+      await SmsService.sendFriendAccepted(phone, userA.name, userA.ryt_id || ''); 
+    } catch (e) { 
+      console.error("SMS failed", e); 
     }
 
-    // 2️⃣ Try Firebase Notification
     try {
       await FirebaseService.sendNotification(
-        sender.id,
+        userB.id,
         'Friend Request Accepted',
-        `${acceptor.name} accepted your friend request`
+        `${userA.name} accepted your friend request`
       );
-    } catch (e:any) {
-      console.error("❌ Firebase notification failed:", e?.message);
+    } catch (e) {
+      console.error("Firebase failed", e);
     }
 
-    // 3️⃣ Create DB Notification (⚠ check before insert - avoid duplicate)
     const existingNoti = await Notification.findOne({
       where: {
-        user_id: sender.id,
+        user_id: userB.id,
         notifiable_type: 'friend_request',
         notifiable_id: friendRequest.id
       }
@@ -122,21 +121,41 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
 
     if (!existingNoti) {
       await Notification.create({
-        user_id: sender.id,
+        user_id: userB.id,
         type: 'friend_accept',
         notifiable_type: 'friend_request',
         notifiable_id: friendRequest.id,
         data: JSON.stringify({
-          acceptor_id: acceptor.id,
-          name: acceptor.name,
-          ryt_id: acceptor.ryt_id,
+          acceptor_id: userA.id,
+          name: userA.name,
+          ryt_id: userA.ryt_id,
         }),
+      });
+    }
+
+    // 👇 SAFE CHAT SESSION CREATION 👇
+    const existingSession = await Session.findOne({
+      where: {
+        [Op.or]: [
+          { user1_id: userA.id, user2_id: userB.id },
+          { user1_id: userB.id, user2_id: userA.id }
+        ]
+      }
+    });
+
+    if (!existingSession) {
+      await Session.create({
+        user1_id: userA.id,
+        user2_id: userB.id,
+        block: []
       });
     }
   }
 
-  return ResponseHelper.success(res, 'Friend request accepted');
+  return ResponseHelper.success(res, 'Friend request accepted & Chat session created');
 });
+
+
 
 
   // GET /api/user/friend/requests/accepted - Get accepted requests (friends)

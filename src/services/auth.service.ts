@@ -147,6 +147,7 @@ static async signup(data: any) {
       message: "Successfully logged in",
       data: {
         user: encryptedUser,
+        user_id: user.id, // Added for controller access
         access_token: token,
         token_type: "Bearer",
         expires_at: expiresAt

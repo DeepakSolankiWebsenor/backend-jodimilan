@@ -1,0 +1,273 @@
+import { Server as HTTPServer } from 'http';
+import { Server, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { config } from './config/app';
+import { UserPresence, Chat, Session } from './models';
+import { Op } from 'sequelize';
+
+interface AuthenticatedSocket extends Socket {
+  userId?: number;
+}
+
+interface TypingData {
+  sessionId: number;
+  userId: number;
+  userName: string;
+}
+
+interface MessageData {
+  sessionId: number;
+  messageId: number;
+  fromUserId: number;
+  toUserId: number;
+}
+
+export class SocketServer {
+  private io: Server;
+
+  constructor(httpServer: HTTPServer) {
+    this.io = new Server(httpServer, {
+      cors: {
+        origin: true,
+        credentials: true,
+      },
+      pingTimeout: 60000,
+      pingInterval: 25000,
+    });
+
+    this.setupMiddleware();
+    this.setupEventHandlers();
+  }
+
+  private setupMiddleware() {
+    // Authentication middleware
+    this.io.use(async (socket: AuthenticatedSocket, next) => {
+      try {
+        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+        
+        if (!token) {
+          return next(new Error('Authentication token required'));
+        }
+
+        const decoded = jwt.verify(token, config.jwt.secret) as { userId: number };
+        socket.userId = decoded.userId;
+        
+        next();
+      } catch (error) {
+        next(new Error('Invalid authentication token'));
+      }
+    });
+  }
+
+  private setupEventHandlers() {
+    this.io.on('connection', async (socket: AuthenticatedSocket) => {
+      const userId = socket.userId!;
+      console.log(`✅ User ${userId} connected with socket ${socket.id}`);
+
+      // Update user presence
+      await this.updateUserPresence(userId, socket.id, true);
+
+      // Join user's personal room
+      socket.join(`user:${userId}`);
+
+      // Notify friends that user is online
+      await this.notifyFriendsOnlineStatus(userId, true);
+
+      // Handle joining chat sessions
+      socket.on('join:session', async (sessionId: number) => {
+        socket.join(`session:${sessionId}`);
+        console.log(`User ${userId} joined session ${sessionId}`);
+      });
+
+      // Handle leaving chat sessions
+      socket.on('leave:session', (sessionId: number) => {
+        socket.leave(`session:${sessionId}`);
+        console.log(`User ${userId} left session ${sessionId}`);
+      });
+
+      // Handle typing indicators
+      socket.on('typing:start', async (data: TypingData) => {
+        const { sessionId, userId: typingUserId } = data;
+        
+        // Update session typing_users
+        const session = await Session.findByPk(sessionId);
+        if (session) {
+          // Parse existing typing_users or create new object
+          let typingUsers: Record<string, number> = {};
+          if (session.typing_users) {
+            // If it's a string, parse it; if it's already an object, use it
+            typingUsers = typeof session.typing_users === 'string' 
+              ? JSON.parse(session.typing_users)
+              : { ...session.typing_users };
+          }
+          
+          typingUsers[typingUserId.toString()] = Date.now();
+          session.typing_users = typingUsers;
+          await session.save();
+
+          // Broadcast to other user in session
+          socket.to(`session:${sessionId}`).emit('typing:start', {
+            sessionId,
+            userId: typingUserId,
+            userName: data.userName,
+          });
+        }
+      });
+
+      socket.on('typing:stop', async (data: TypingData) => {
+        const { sessionId, userId: typingUserId } = data;
+        
+        // Update session typing_users
+        const session = await Session.findByPk(sessionId);
+        if (session) {
+          // Parse existing typing_users or create new object
+          let typingUsers: Record<string, number> = {};
+          if (session.typing_users) {
+            typingUsers = typeof session.typing_users === 'string'
+              ? JSON.parse(session.typing_users)
+              : { ...session.typing_users };
+          }
+          
+          delete typingUsers[typingUserId.toString()];
+          session.typing_users = typingUsers;
+          await session.save();
+
+          // Broadcast to other user in session
+          socket.to(`session:${sessionId}`).emit('typing:stop', {
+            sessionId,
+            userId: typingUserId,
+          });
+        }
+      });
+
+      // Handle message delivery confirmation
+      socket.on('message:delivered', async (data: MessageData) => {
+        const { messageId, sessionId } = data;
+        
+        console.log('📬 Message delivered event:', { messageId, sessionId, userId });
+        
+        // Update message status
+        const message = await Chat.findByPk(messageId);
+        if (message && message.status !== 'read') {
+          message.status = 'delivered';
+          message.delivered_at = new Date();
+          await message.save();
+
+          console.log('✅ Updated message status to delivered:', messageId);
+
+          // Notify sender
+          socket.to(`session:${sessionId}`).emit('message:status', {
+            messageId,
+            status: 'delivered',
+            deliveredAt: message.delivered_at,
+          });
+        }
+      });
+
+      // Handle message read confirmation (single message)
+      socket.on('message:read', async (data: MessageData) => {
+        const { messageId, sessionId } = data;
+        
+        console.log('📖 Message read event (single):', { messageId, sessionId, userId });
+        
+        // Update message status
+        const message = await Chat.findByPk(messageId);
+        if (message) {
+          message.status = 'read';
+          message.read_at = new Date();
+          message.is_read = true; // Legacy field
+          await message.save();
+
+          console.log('✅ Updated message status to read:', messageId);
+
+          // Notify sender
+          socket.to(`session:${sessionId}`).emit('message:status', {
+            messageId,
+            status: 'read',
+            readAt: message.read_at,
+          });
+        }
+      });
+
+      // Handle disconnect
+      socket.on('disconnect', async () => {
+        console.log(`❌ User ${userId} disconnected`);
+        
+        // Update user presence
+        await this.updateUserPresence(userId, undefined, false);
+
+        // Notify friends that user is offline
+        await this.notifyFriendsOnlineStatus(userId, false);
+      });
+    });
+  }
+
+  private async updateUserPresence(userId: number, socketId: string | undefined, isOnline: boolean) {
+    try {
+      const [presence] = await UserPresence.findOrCreate({
+        where: { user_id: userId },
+        defaults: {
+          user_id: userId,
+          is_online: isOnline,
+          socket_id: socketId,
+          last_seen: new Date(),
+        },
+      });
+
+      presence.is_online = isOnline;
+      presence.socket_id = socketId;
+      presence.last_seen = new Date();
+      await presence.save();
+    } catch (error) {
+      console.error('Error updating user presence:', error);
+    }
+  }
+
+  private async notifyFriendsOnlineStatus(userId: number, isOnline: boolean) {
+    try {
+      // Find all sessions where user is participant
+      const sessions = await Session.findAll({
+        where: {
+          [Op.or]: [{ user1_id: userId }, { user2_id: userId }],
+        },
+      });
+
+      // Get friend IDs
+      const friendIds = sessions.map(session => 
+        session.user1_id === userId ? session.user2_id : session.user1_id
+      );
+
+      // Emit presence update to each friend
+      friendIds.forEach(friendId => {
+        this.io.to(`user:${friendId}`).emit('user:presence', {
+          userId,
+          isOnline,
+          lastSeen: new Date(),
+        });
+      });
+    } catch (error) {
+      console.error('Error notifying friends online status:', error);
+    }
+  }
+
+  // Method to emit new message to recipient
+  public emitNewMessage(sessionId: number, message: any) {
+    this.io.to(`session:${sessionId}`).emit('message:new', message);
+  }
+
+  // Method to get Socket.IO instance
+  public getIO(): Server {
+    return this.io;
+  }
+}
+
+let socketServer: SocketServer | null = null;
+
+export const initializeSocketServer = (httpServer: HTTPServer): SocketServer => {
+  socketServer = new SocketServer(httpServer);
+  return socketServer;
+};
+
+export const getSocketServer = (): SocketServer | null => {
+  return socketServer;
+};

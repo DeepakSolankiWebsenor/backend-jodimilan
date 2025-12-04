@@ -25,8 +25,36 @@ export class Chat extends Model {
   @Column({ type: DataType.ENUM('text', 'image', 'file'), defaultValue: 'text' })
   message_type!: string;
 
+  // Legacy field - kept for backward compatibility
   @Column({ type: DataType.BOOLEAN, defaultValue: false })
   is_read!: boolean;
+
+  // Enhanced status tracking
+  @Column({ 
+    type: DataType.ENUM('sending', 'sent', 'delivered', 'read', 'failed'), 
+    defaultValue: 'sent',
+    comment: 'Message delivery status'
+  })
+  status!: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+  @Column({ type: DataType.DATE, allowNull: true, comment: 'When message was delivered' })
+  delivered_at?: Date;
+
+  @Column({ type: DataType.DATE, allowNull: true, comment: 'When message was read' })
+  read_at?: Date;
+
+  // Reply functionality
+  @ForeignKey(() => Chat)
+  @Column({ type: DataType.BIGINT, allowNull: true, comment: 'ID of message being replied to' })
+  reply_to?: number;
+
+  // Soft delete per user
+  @Column({ 
+    type: DataType.JSON, 
+    allowNull: true, 
+    comment: 'User IDs who deleted this message: {user_id: true}' 
+  })
+  deleted_for?: Record<string, boolean>;
 
   @BelongsTo(() => Session)
   session!: Session;
@@ -36,4 +64,7 @@ export class Chat extends Model {
 
   @BelongsTo(() => User, 'to_user_id')
   toUser!: User;
+
+  @BelongsTo(() => Chat, 'reply_to')
+  replyToMessage?: Chat;
 }
