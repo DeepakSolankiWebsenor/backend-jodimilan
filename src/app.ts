@@ -1,11 +1,11 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
+import routes from "./routes"
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import path from 'path';
 import { config } from './config/app';
-import routes from './routes';
 import { errorHandler } from './middlewares/errorHandler';
 import rateLimit from 'express-rate-limit';
 import { OrderController } from './controllers/order/order.controller'; // ADD THIS
