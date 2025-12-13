@@ -11,6 +11,13 @@ interface EnquiryAttributes {
 export class Enquiry extends Model<EnquiryAttributes> {
 
   @Column({
+    type: DataType.BIGINT,
+    primaryKey: true,
+    autoIncrement: true,
+  })
+  id!: number;
+
+  @Column({
     type: DataType.STRING(100),
     allowNull: false,
   })

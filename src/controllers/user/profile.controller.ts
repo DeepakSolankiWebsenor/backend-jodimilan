@@ -36,6 +36,11 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
     const user = await User.findByPk(req.userId!);
     const profile = await UserProfile.findOne({ where: { user_id: req.userId! } });
 
+    if (req.file) {
+      // If file uploaded to S3, update profile_photo
+      req.body.profile_photo = (req.file as any).location;
+    }
+
     await user?.update(req.body);
     await profile?.update(req.body);
 
@@ -60,13 +65,13 @@ static getCurrentPlan = asyncHandler(async (req: AuthRequest, res: Response) => 
     ]
   });
 
-  if (!user?.pacakge_id) {
+  if (!user?.package_id) {
     return ResponseHelper.success(res, 'No active plan', null);
   }
 
   const currentPlan = {
-    package_id: user.pacakge_id,
-    expiry: user.pacakge_expiry,
+    package_id: user.package_id,
+    expiry: user.package_expiry,
     package: user.package
   };
 
@@ -133,7 +138,7 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
       files.map((file) =>
         UserAlbum.create({
           user_id: req.userId!,
-          image_path: `/uploads/${file.filename}`,
+          image_path: (file as any).location,
           caption: req.body.caption,
         })
       )

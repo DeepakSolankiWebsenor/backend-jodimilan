@@ -34,6 +34,8 @@ const { Config } = require('../models/Config');
 const { Setting } = require('../models/Setting');
 const { Thikhana } = require('../models/Thikhana');
 const { Enquiry } = require('../models/Enquiry');
+const { Address } = require('../models/Address');
+const { Cart } = require('../models/Cart');
 // Lazy initialization to avoid circular dependency issues
 let sequelizeInstance: Sequelize | null = null;
 
@@ -92,7 +94,9 @@ function getSequelizeInstance(): Sequelize {
       Config,
       Setting,
       Thikhana,
-       Enquiry,
+      Enquiry,
+      Address,
+      Cart,
     ]);
   }
   return sequelizeInstance;

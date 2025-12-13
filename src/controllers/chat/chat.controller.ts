@@ -220,21 +220,35 @@ export class ChatController {
   });
 
   // POST /api/user/session/:session/block - Block user in chat
-  static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { session } = req.params;
+static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { session } = req.params;
 
-    const sessionData = await Session.findByPk(session);
-    if (!sessionData) {
-      return ResponseHelper.notFound(res, 'Session not found');
+  const sessionData = await Session.findByPk(session);
+  if (!sessionData) {
+    return ResponseHelper.notFound(res, 'Session not found');
+  }
+
+  let block = sessionData.block;
+
+  // 🛠 FIX: If stored as string → convert to {}
+  if (!block || typeof block === "string") {
+    try {
+      block = JSON.parse(block);
+      if (!block || typeof block !== "object") block = {};
+    } catch {
+      block = {};
     }
+  }
 
-    const block = sessionData.block || {};
-    block[req.userId!] = true;
-    sessionData.block = block;
-    await sessionData.save();
+  // Set block flag
+  block[req.userId!] = true;
 
-    return ResponseHelper.success(res, 'User blocked');
-  });
+  sessionData.block = block;
+  await sessionData.save();
+
+  return ResponseHelper.success(res, 'User blocked');
+});
+
 
   // POST /api/user/session/:session/unblock - Unblock user in chat
   static unblockUser = asyncHandler(async (req: AuthRequest, res: Response) => {

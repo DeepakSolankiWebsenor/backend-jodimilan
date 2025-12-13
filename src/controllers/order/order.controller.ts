@@ -41,6 +41,8 @@ export class OrderController {
   });
 
   order.razorpay_order_id = razorpayOrder.id;
+  console.log("Razorpay response:", razorpayOrder);
+
   await order.save();
 
   return ResponseHelper.success(res, "Order created successfully", {
@@ -106,8 +108,8 @@ export class OrderController {
     const startDate = new Date();
     const endDate = moment(startDate).add(pkg.package_duration, 'days').toDate();
 
-    user.pacakge_id = pkg.id;
-    user.pacakge_expiry = endDate;
+    user.package_id = pkg.id;
+    user.package_expiry = endDate;
     // user.total_profile_view_count = pkg.total_profile_view;
     await user.save();
 
@@ -269,13 +271,14 @@ static paymentWebhook = asyncHandler(async (req: any, res: Response) => {
 
     const pkg = await Package.findByPk(order.package_id);
     const user = await User.findByPk(order.user_id);
-
+console.log("Package found:", pkg);
+console.log("User found:", user);
     if (pkg && user) {
       const startDate = new Date();
       const endDate = moment(startDate).add(pkg.package_duration, "days").toDate();
 
-      user.pacakge_id = pkg.id;
-      user.pacakge_expiry = endDate;
+      user.package_id = pkg.id;
+      user.package_expiry = endDate;
       await user.save();
 
       // Save payment record properly

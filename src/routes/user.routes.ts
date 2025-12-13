@@ -5,7 +5,7 @@ import { CommonController } from '../controllers/common/common.controller';
 import { AuthController } from '../controllers/auth/auth.controller';
 import { OrderController } from '../controllers/order/order.controller';
 import { authenticate, optionalAuth } from '../middlewares/auth';
-import { uploadMultiple } from '../middlewares/upload';
+import { uploadMultiple, uploadSingle } from '../middlewares/upload';
 import { Notification } from '../models';
 import { ResponseHelper } from '../utils/response';
 import { User } from '../models';
@@ -135,7 +135,7 @@ router.post('/change-password', AuthController.changePassword);
 
 // Profile management
 router.get('/profile', ProfileController.getProfile);
-router.post('/profile/update', ProfileController.updateProfile);
+router.post('/profile/update', uploadSingle('profile_image'), ProfileController.updateProfile);
 router.post('/profile/update-partner-preferences', ProfileController.updatePartnerPreferences);
 router.get('/currrent-plan', ProfileController.getCurrentPlan);
 router.get('/profileById/:id', ProfileController.getProfileById);

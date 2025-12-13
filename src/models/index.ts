@@ -29,4 +29,6 @@ export * from './Config';
 export * from './Setting';
 export * from './Thikhana';
 export * from './Enquiry';
+export * from './Address';
+export * from './Cart';
 

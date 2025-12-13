@@ -18,6 +18,9 @@ import { Package } from './Package';
 import { UserAlbum } from './UserAlbum';
 import { BlockProfile } from './BlockProfile';
 import { PackagePayment } from './PackagePayment';
+import { Address } from './Address';
+import { Cart } from './Cart';
+
 
 @Table({
   tableName: 'users',
@@ -169,13 +172,13 @@ export class User extends Model {
     type: DataType.BIGINT,
     allowNull: true,
   })
-  pacakge_id?: number;
+  package_id?: number;
 
   @Column({
     type: DataType.DATE,
     allowNull: true,
   })
-  pacakge_expiry?: Date;
+  package_expiry?: Date;
 
   @Column({
     type: DataType.INTEGER,
@@ -200,6 +203,18 @@ export class User extends Model {
     allowNull: true,
   })
   otp_expiry?: Date | null;
+
+  @Column({
+    type: DataType.INTEGER,
+    defaultValue: 0,
+  })
+  otp_attempts!: number;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  otp_last_sent?: Date | null;
 
   @Column({
     type: DataType.JSON,
@@ -255,4 +270,10 @@ export class User extends Model {
 
   @HasOne(() => PackagePayment)
   packagePayment?: PackagePayment;
+
+  @HasMany(() => Address)
+  addresses!: Address[];
+
+  @HasMany(() => Cart)
+  carts!: Cart[];
 }

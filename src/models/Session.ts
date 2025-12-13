@@ -15,8 +15,13 @@ export class Session extends Model {
   @Column({ type: DataType.BIGINT, allowNull: false })
   user2_id!: number;
 
-  @Column({ type: DataType.JSON, allowNull: true, comment: 'Block data {user_id: true/false}' })
-  block?: any;
+ @Column({
+  type: DataType.JSON,
+  allowNull: true,
+  defaultValue: {}
+})
+block?: any;
+
 
   // Last message tracking for chat list preview
   @ForeignKey(() => Chat)

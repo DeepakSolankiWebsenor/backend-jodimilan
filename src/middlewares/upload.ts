@@ -11,14 +11,29 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
+import { S3Client } from '@aws-sdk/client-s3';
+import multerS3 from 'multer-s3';
+
+// Configure S3 Client
+const s3 = new S3Client({
+  region: config.aws.region,
+  credentials: {
+    accessKeyId: config.aws.accessKeyId,
+    secretAccessKey: config.aws.secretAccessKey,
   },
-  filename: (req, file, cb) => {
+});
+
+// Configure storage
+const storage = multerS3({
+  s3: s3,
+  bucket: config.aws.bucketName,
+  metadata: (req: any, file: any, cb: any) => {
+    cb(null, { fieldName: file.fieldname });
+  },
+  key: (req: any, file: any, cb: any) => {
     const uniqueSuffix = `${Date.now()}-${Helper.makeRandomString(8)}`;
     const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+    cb(null, `uploads/${file.fieldname}-${uniqueSuffix}${ext}`);
   },
 });
 

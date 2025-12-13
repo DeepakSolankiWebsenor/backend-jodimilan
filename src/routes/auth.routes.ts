@@ -18,6 +18,7 @@ router.post('/otp/login', AuthController.loginWithOtp);
 router.post('/signup', validate(signupValidator), handleValidationErrors, AuthController.signup);
 router.post('/create/otp', AuthController.createOtp);
 router.post('/resend/otp', AuthController.resendOtp);
+router.post('/verify-otp', AuthController.verifyOtpPublic); // Public verification
 router.post('/forgot-password', validate(forgotPasswordValidator), handleValidationErrors, AuthController.forgotPassword);
 router.get('/userMailVerified/:id', AuthController.verifyEmail);
 

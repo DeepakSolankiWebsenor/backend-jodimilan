@@ -1,5 +1,5 @@
 // IMPORTANT: Import database FIRST to avoid circular dependency
-import { getSequelize } from './config/database';
+import { getSequelize ,connectDatabase} from './config/database';
 import { config } from './config/app';
 import app from './app';
 import { initializeFirebase } from './utils/firebase';

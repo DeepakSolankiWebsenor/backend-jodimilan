@@ -5,6 +5,7 @@ import { OtpService } from '../utils/otp';
 import { Helper } from '../utils/helper';
 import { SmsService } from '../utils/sms';
 import { EmailService } from '../utils/email';
+import { sendSmsOtp } from '../utils/sendSmsOtp';
 import { AppError } from '../middlewares/errorHandler';
 import { Op } from 'sequelize';
 
@@ -29,9 +30,9 @@ static async signup(data: any) {
   const age = Helper.calculateAge(new Date(data.dob));
   const rytId = Helper.generateRytId();
 
-  // 👉 Generate OTP via helper or custom logic
-  const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
-  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // expires in 10 min
+  // 👉 Generate OTP
+  const otp = '123456'; // Hardcoded as per requirement for now
+  const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
 
   const user = await User.create({
     name: data.name,
@@ -51,21 +52,28 @@ static async signup(data: any) {
     age,
     ryt_id: rytId,
     status: "Not Verified",
+    is_phone_verified: false,
 
     // 🆕 Save OTP
     otp,
     otp_expiry: otpExpiry,
+    otp_attempts: 0,
+    otp_last_sent: new Date(),
   });
 
-  // 👉 Send OTP email
-  await EmailService.sendOtp(user.email, user.name, otp.toString());
+  // 👉 Send OTP via SMS (Placeholder)
+  await sendSmsOtp(user.phone, otp);
+
+  // Maintain Email Service but don't use it for verification yet
+  // await EmailService.sendOtp(user.email, user.name, otp.toString());
 
   return {
     code: 201,
     success: true,
-    message: "User registered successfully. Verify OTP.",
+    message: "User registered successfully. Verify Phone OTP.",
     userId: user.id,
     email: user.email,
+    phone: user.phone,
   };
 }
 
@@ -74,16 +82,23 @@ static async signup(data: any) {
   /**
    * Login user with email/phone/ryt_id
    */
- static async login(identifier: string, password: string, dialingCode?: string) {
+static async login(identifier: string, password: string, dialingCode?: string) {
   try {
+    // Build dynamic where clause
     let whereClause: any = {};
 
-    if (identifier.includes('@')) whereClause.email = identifier;
-    else if (/^\d+$/.test(identifier) && identifier.length === 10) {
+    if (identifier.includes("@")) {
+      whereClause.email = identifier;
+    } 
+    else if (/^\d{10}$/.test(identifier)) {
       whereClause.phone = identifier;
       if (dialingCode) whereClause.dialing_code = dialingCode;
-    } else whereClause.ryt_id = identifier;
+    } 
+    else {
+      whereClause.ryt_id = identifier;
+    }
 
+    // Find user 
     const user = await User.findOne({ where: whereClause });
 
     if (!user) {
@@ -94,6 +109,7 @@ static async signup(data: any) {
       };
     }
 
+    // Validate password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return {
@@ -103,6 +119,7 @@ static async signup(data: any) {
       };
     }
 
+    // Deleted users
     if (user.status === "Deleted") {
       return {
         code: 403,
@@ -111,15 +128,35 @@ static async signup(data: any) {
       };
     }
 
-    if (user.status === "Not Verified") {
+    // CHECK PHONE VERIFICATION
+    if (!user.is_phone_verified) {
+
+      // Generate and save OTP
+      const otp = "123456";
+      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+      user.otp = otp;
+      user.otp_expiry = otpExpiry;
+      user.otp_last_sent = new Date();
+      await user.save();
+
+      // Send SMS
+      await sendSmsOtp(user.phone, otp);
+
+      // IMPORTANT: RETURN PHONE + DIALING CODE
       return {
         code: 403,
         success: false,
-        message: "Account not verified. Please verify your phone number"
+        message: "Phone not verified. OTP sent.",
+        is_phone_verified: false,
+        data: {
+          phone: user.phone,
+          dialing_code: user.dialing_code || "91",
+        }
       };
     }
 
-    // Generate token
+    // If phone verified → generate token
     const token = JwtService.generateToken({
       userId: user.id,
       email: user.email,
@@ -129,7 +166,6 @@ static async signup(data: any) {
 
     const expiresAt = JwtService.getTokenExpiry();
 
-    // Encrypt full user JSON
     const encryptedUser = Buffer.from(JSON.stringify({
       id: user.id,
       full_name: user.name,
@@ -147,12 +183,13 @@ static async signup(data: any) {
       message: "Successfully logged in",
       data: {
         user: encryptedUser,
-        user_id: user.id, // Added for controller access
+        user_id: user.id,
         access_token: token,
         token_type: "Bearer",
         expires_at: expiresAt
       }
     };
+
   } catch (err: any) {
     return {
       code: 500,
@@ -161,6 +198,7 @@ static async signup(data: any) {
     };
   }
 }
+
 
 
   /**
@@ -216,6 +254,8 @@ static async signup(data: any) {
 
     user.is_phone_verified = true;
     user.status = 'Active';
+    user.otp = null;
+    user.otp_attempts = 0; // Reset attempts on success
     await user.save();
 
     // Send welcome SMS and email
@@ -224,6 +264,58 @@ static async signup(data: any) {
     await EmailService.sendWelcome(user.email, user.name, user.ryt_id || '');
 
     return user;
+  }
+
+  /**
+   * Verify phone with OTP (Public)
+   */
+  static async verifyPhonePublic(phone: string, dialingCode: string, otp: string) {
+    const user = await User.findOne({
+      where: { phone, dialing_code: dialingCode },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    const isValid = await OtpService.verify(user.id, otp);
+    if (!isValid) {
+      throw new AppError('Invalid or expired OTP', 400);
+    }
+
+    user.is_phone_verified = true;
+    user.status = 'Active';
+    user.otp = null;
+    user.otp_attempts = 0;
+    await user.save();
+
+     // Generate token for auto-login
+    const token = JwtService.generateToken({
+      userId: user.id,
+      email: user.email,
+      phone: user.phone,
+      ryt_id: user.ryt_id || ''
+    });
+    const expiresAt = JwtService.getTokenExpiry();
+
+    const encryptedUser = Buffer.from(JSON.stringify({
+      id: user.id,
+      full_name: user.name,
+      email: user.email,
+      phone: user.phone,
+      ryt_id: user.ryt_id,
+      profile_image: user.profile_photo,
+      gender: user.gender,
+      status: user.status
+    })).toString("base64");
+
+    return {
+      message: "Phone verified successfully",
+      access_token: token,
+      expires_at: expiresAt,
+      user: encryptedUser,
+      user_id: user.id
+    };
   }
 
   /**
@@ -288,11 +380,45 @@ static async changePassword(userId: number, currentPassword: string, newPassword
       throw new Error('User not found');
     }
 
-    const otpData = await OtpService.saveOtp(user.id);
-    const fullPhone = Helper.formatPhoneNumber(dialingCode, phone);
-    await SmsService.sendOtp(fullPhone, user.name, otpData.otp);
+    // Cooldown check
+    if (user.otp_last_sent) {
+        const diff = Date.now() - new Date(user.otp_last_sent).getTime();
+        if (diff < 30 * 1000) {
+            throw new Error('Please wait 30 seconds before resending OTP');
+        }
+    }
 
-    return otpData.otp;
+    // Max attempts check
+    if (user.otp_attempts >= 3) {
+        // Here we might want to block for longer, but prompt said "max attempts (3)" 
+        // usually implies a block. I will throw an error.
+        // To Reset attempts, user might need to wait or contact support, 
+        // or we just reset after a long expiry? 
+        // For this task, I will block. 
+        // Ideally we reset on successful login or after 1 hour.
+        
+        // Let's implement auto-reset if last attempt was > 1 hour ago
+        const lastSent = user.otp_last_sent ? new Date(user.otp_last_sent).getTime() : 0;
+        if (Date.now() - lastSent > 60 * 60 * 1000) {
+             user.otp_attempts = 0;
+        } else {
+             throw new Error('Max OTP attempts reached. Please try again later.');
+        }
+    }
+
+    const otp = '123456'; // Hardcoded
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
+
+    user.otp = otp;
+    user.otp_expiry = otpExpiry;
+    user.otp_attempts += 1;
+    user.otp_last_sent = new Date();
+    await user.save();
+
+    const fullPhone = Helper.formatPhoneNumber(dialingCode, phone);
+    await sendSmsOtp(fullPhone, otp);
+
+    return otp;
   }
 
 

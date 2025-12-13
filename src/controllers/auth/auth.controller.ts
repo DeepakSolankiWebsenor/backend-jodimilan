@@ -104,11 +104,24 @@ static signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   /**
    * POST /api/auth/verify-phone - Verify phone with OTP (authenticated)
    */
+  /**
+   * POST /api/auth/verify-phone - Verify phone with OTP (authenticated)
+   */
   static verifyPhone = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { otp } = req.body;
     await AuthService.verifyPhone(req.userId!, otp);
 
     return ResponseHelper.success(res, 'Phone verified successfully');
+  });
+
+  /**
+   * POST /api/auth/verify-otp-public - Verify phone with OTP (Public)
+   */
+  static verifyOtpPublic = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { phone, otp, dialing_code } = req.body;
+    const result = await AuthService.verifyPhonePublic(phone, dialing_code, otp);
+
+    return ResponseHelper.success(res, 'Phone verified successfully', result);
   });
 
   /**

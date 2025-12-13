@@ -63,6 +63,12 @@ export const config = {
     redirectUrl: process.env.CCAVENUE_REDIRECT_URL || '',
     cancelUrl: process.env.CCAVENUE_CANCEL_URL || '',
   },
+  aws: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    region: process.env.AWS_REGION || 'us-east-1',
+    bucketName: process.env.AWS_BUCKET_NAME || '',
+  },
   upload: {
     maxSize: parseInt(process.env.UPLOAD_MAX_SIZE || '5242880', 10),
     directory: process.env.UPLOAD_DIR || './uploads',
