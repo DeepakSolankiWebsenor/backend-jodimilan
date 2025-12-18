@@ -2,11 +2,11 @@
   "name": "jodimilan-express-api",
   "version": "1.0.0",
   "description": "Jodi Milan - Express.js API (TypeScript)",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node scr/index.js",
+    "start": "node dist/index.js",
     "migrate": "npx sequelize-cli db:migrate",
     "migrate:undo": "npx sequelize-cli db:migrate:undo",
     "seed": "npx sequelize-cli db:seed:all",
