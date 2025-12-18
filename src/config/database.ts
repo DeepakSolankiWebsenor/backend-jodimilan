@@ -42,28 +42,46 @@ let sequelizeInstance: Sequelize | null = null;
 function getSequelizeInstance(): Sequelize {
   if (!sequelizeInstance) {
     // Create Sequelize instance and explicitly add models
-    sequelizeInstance = new Sequelize({
-      database: process.env.DB_NAME || 'jodimilan',
-      username: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      host: process.env.DB_HOST || '127.0.0.1',
-      port: parseInt(process.env.DB_PORT || '3306', 10),
-      dialect: (process.env.DB_DIALECT || 'mysql') as 'mysql',
-      logging: process.env.DB_LOGGING === 'true' ? console.log : false,
-      pool: {
-        max: 10,
-        min: 0,
-        acquire: 30000,
-        idle: 10000,
-      },
-      define: {
-        timestamps: true,
-        underscored: false,
-        createdAt: 'created_at',
-        updatedAt: 'updated_at',
-      },
-      timezone: '+05:30', // India timezone
-    });
+
+console.log({
+  DB_HOST: process.env.DB_HOST,
+  DB_USER: process.env.DB_USER,
+  DB_NAME: process.env.DB_NAME,
+  DB_PASSWORD: process.env.DB_PASSWORD,
+});
+
+
+  sequelizeInstance = new Sequelize({
+  database: process.env.DB_NAME || 'jodimilan',
+  username: process.env.DB_USER || 'admin',
+  password: process.env.DB_PASSWORD || '',
+  host: process.env.DB_HOST || 'jodimilan.cqym8wks08n.ap-south-1.rds.amazonaws.com',
+  port: parseInt(process.env.DB_PORT || '3306', 10),
+  dialect: 'mysql',
+
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+    },
+  },
+
+  logging: process.env.DB_LOGGING === 'true' ? console.log : false,
+  pool: {
+    max: 10,
+    min: 0,
+    acquire: 30000,
+    idle: 10000,
+  },
+  define: {
+    timestamps: true,
+    underscored: false,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  },
+  timezone: '+05:30',
+});
+
 
     // Add all models
     sequelizeInstance.addModels([
