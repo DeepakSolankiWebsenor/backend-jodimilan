@@ -12,6 +12,7 @@ import { State } from './State';
 import { City } from './City';
 import { Caste } from './Caste';
 import { Area } from './Area';
+import { Thikhana } from './Thikhana';
 
 @Table({
   tableName: 'user_profiles',
@@ -199,6 +200,7 @@ export class UserProfile extends Model {
   })
   profile_image?: string;
 
+  @ForeignKey(() => Thikhana)
   @Column({
     type: DataType.BIGINT,
     allowNull: true,
@@ -283,6 +285,9 @@ export class UserProfile extends Model {
 
   @BelongsTo(() => Area, 'thikana_area')
   thikanaArea?: Area;
+  
+  @BelongsTo(() => Thikhana, 'thikhana_id')
+  thikhanaRelation?: Thikhana;
 
   @BelongsTo(() => State, 'ed_state')
   edState?: State;

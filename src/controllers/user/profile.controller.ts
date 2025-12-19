@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package } from '../../models';
+import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package, Thikhana } from '../../models';
 import { EncryptionService } from '../../utils/encryption';
 import { Op } from 'sequelize';
 import { Helper } from '../../utils/helper';
@@ -15,7 +15,12 @@ export class ProfileController {
 static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   const user = await User.findByPk(req.userId!, {
     include: [
-      'profile', 'countryRelation', 'stateRelation', 'religionRelation',
+      {
+        model: UserProfile,
+        as: 'profile',
+        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
+      }, 
+      'countryRelation', 'stateRelation', 'religionRelation',
       'casteRelation', 'package', 'albums'
     ],
     attributes: { exclude: ['password'] },
@@ -23,7 +28,13 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   if (!user) return ResponseHelper.error(res, 'User not found');
 
-  const encryptedUser = EncryptionService.encrypt(user.toJSON());
+  const userData = user.toJSON();
+  console.log("DEBUG: getProfile - Returning User Data:", {
+      id: userData.id,
+      partner_preferences: userData.partner_preferences
+  });
+
+  const encryptedUser = EncryptionService.encrypt(userData);
 
   return ResponseHelper.success(res, 'Profile retrieved successfully', {
     user: encryptedUser
@@ -34,23 +45,93 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   // POST /api/user/profile/update - Update profile
   static updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
     const user = await User.findByPk(req.userId!);
-    const profile = await UserProfile.findOne({ where: { user_id: req.userId! } });
+    
+    // Ensure UserProfile exists
+    const [profile] = await UserProfile.findOrCreate({
+        where: { user_id: req.userId! },
+        defaults: { user_id: req.userId! }
+    });
 
     if (req.file) {
       // If file uploaded to S3, update profile_photo
       req.body.profile_photo = (req.file as any).location;
     }
 
-    await user?.update(req.body);
-    await profile?.update(req.body);
+    console.log("DEBUG: Profile Update Request Payload:", req.body);
+    console.log("DEBUG: User ID:", req.userId);
 
-    return ResponseHelper.success(res, 'Profile updated successfully');
+    // Separate fields for User and UserProfile
+    const userFields = [
+        'name', 'last_name', 'email', 'phone', 'dialing_code', 
+        'profile_by', 'gender', 'mat_status', 'religion', 'caste', 
+        'country', 'state', 'dob', 'profile_photo', 'partner_preferences'
+    ];
+    
+    const userUpdate: any = {};
+    const profileUpdate: any = {};
+
+    Object.keys(req.body).forEach(key => {
+        if (key === 'id') return; // Skip primary key in updates
+        if (userFields.includes(key)) {
+            userUpdate[key] = req.body[key];
+        } else {
+            // Assume other fields go to Profile
+            profileUpdate[key] = req.body[key];
+        }
+    });
+
+    console.log("DEBUG: Separated User Update:", userUpdate);
+    console.log("DEBUG: Separated Profile Update:", profileUpdate);
+
+    if (Object.keys(userUpdate).length > 0) {
+        if (userUpdate.dob) {
+            userUpdate.age = moment().diff(moment(userUpdate.dob), 'years');
+        }
+        const [userAffected] = await User.update(userUpdate, { where: { id: req.userId! } });
+        console.log("DEBUG: User update rows affected:", userAffected);
+    }
+    
+    if (Object.keys(profileUpdate).length > 0) {
+        const [profileAffected] = await UserProfile.update(profileUpdate, { where: { user_id: req.userId! } });
+        console.log("DEBUG: Profile update rows affected:", profileAffected);
+    }
+
+    // Return updated and encrypted profile to keep frontend in sync
+    const updatedUser = await User.findByPk(req.userId!, {
+        include: [
+            {
+                model: UserProfile,
+                as: 'profile',
+                include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
+            },
+            'countryRelation', 'stateRelation', 'religionRelation',
+            'casteRelation', 'package', 'albums'
+        ],
+        attributes: { exclude: ['password'] },
+    });
+
+    console.log("DEBUG: Updated User Data from DB (Raw):", updatedUser?.toJSON());
+
+    const encryptedUser = EncryptionService.encrypt(updatedUser?.toJSON());
+
+    return ResponseHelper.success(res, 'Profile updated successfully', {
+        user: encryptedUser
+    });
   });
 
   // POST /api/user/profile/update-partner-preferences
   static updatePartnerPreferences = asyncHandler(async (req: AuthRequest, res: Response) => {
+    console.log("DEBUG: Partner Preferences Update Request:", {
+        userId: req.userId,
+        body: req.body
+    });
     const user = await User.findByPk(req.userId!);
-    await user?.update({ partner_preferences: req.body });
+    if (!user) {
+        console.log("DEBUG: User not found for preferences update:", req.userId);
+        return ResponseHelper.error(res, 'User not found');
+    }
+    await user.update({ partner_preferences: req.body });
+    console.log("DEBUG: Partner preferences updated successfully in DB");
     return ResponseHelper.success(res, 'Partner preferences updated');
   });
 
