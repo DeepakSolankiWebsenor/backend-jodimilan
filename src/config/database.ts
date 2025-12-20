@@ -59,12 +59,12 @@ console.log({
   port: parseInt(process.env.DB_PORT || '3306', 10),
   dialect: 'mysql',
 
-  dialectOptions: {
+  dialectOptions: process.env.DB_SSL === 'true' ? {
     ssl: {
       require: true,
       rejectUnauthorized: false,
     },
-  },
+  } : {},
 
   logging: process.env.DB_LOGGING === 'true' ? console.log : false,
   pool: {

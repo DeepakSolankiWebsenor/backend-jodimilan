@@ -87,7 +87,8 @@ export class SocketServer {
 
       // Handle typing indicators
       socket.on('typing:start', async (data: TypingData) => {
-        const { sessionId, userId: typingUserId } = data;
+        const { sessionId } = data;
+        const typingUserId = userId; // Use authenticated userId
         
         // Update session typing_users
         const session = await Session.findByPk(sessionId);
@@ -115,7 +116,8 @@ export class SocketServer {
       });
 
       socket.on('typing:stop', async (data: TypingData) => {
-        const { sessionId, userId: typingUserId } = data;
+        const { sessionId } = data;
+        const typingUserId = userId; // Use authenticated userId
         
         // Update session typing_users
         const session = await Session.findByPk(sessionId);

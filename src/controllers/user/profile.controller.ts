@@ -171,10 +171,16 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
   const user = await User.findOne({
     where: { ryt_id: rytId },
     attributes: { exclude: ["password", "otp"] },
- include: [
-  { association: "profile" },
-  { association: "albums", attributes: ["id", "images", "created_at"] }
-]
+    include: [
+      {
+        model: UserProfile,
+        as: 'profile',
+        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
+      },
+      'countryRelation', 'stateRelation', 'religionRelation',
+      'casteRelation', 'package', 
+      { association: "albums", attributes: ["id", "images", "created_at"] }
+    ],
 
 
   });
@@ -253,18 +259,37 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
 
   // GET /api/user/browseProfile - Browse profiles with filters
   static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = 1, limit = 20, gender, mat_status, religion, caste, min_age, max_age } = req.query;
+    const { page = 1, limit = 20, gender, mat_status, religion, caste, min_age, max_age, state, city, occupation } = req.query;
     const { offset } = Helper.paginate(Number(page), Number(limit));
 
     const where: any = { status: 'Active' };
     if (gender) where.gender = gender;
-    if (mat_status) where.mat_status = mat_status;
-    if (religion) where.religion = religion;
-    if (caste) where.caste = caste;
+    if (mat_status) {
+        where.mat_status = Array.isArray(mat_status) ? { [Op.in]: mat_status } : mat_status;
+    }
+    if (religion) {
+        where.religion = Array.isArray(religion) ? { [Op.in]: religion } : religion;
+    }
+    if (caste) {
+        where.caste = Array.isArray(caste) ? { [Op.in]: caste } : caste;
+    }
+    if (state) {
+        where.state = Array.isArray(state) ? { [Op.in]: state } : state;
+    }
+
     if (min_age || max_age) {
       where.age = {};
       if (min_age) where.age[Op.gte] = min_age;
       if (max_age) where.age[Op.lte] = max_age;
+    }
+
+    // Profile filters
+    const profileWhere: any = {};
+    if (city) {
+        profileWhere.birth_city = Array.isArray(city) ? { [Op.in]: city } : city;
+    }
+    if (occupation) {
+        profileWhere.occupation = Array.isArray(occupation) ? { [Op.in]: occupation } : occupation;
     }
 
     // Exclude blocked profiles
@@ -276,7 +301,13 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
 
     const { count, rows } = await User.findAndCountAll({
       where,
-      include: ['profile'],
+      include: [
+        {
+            model: UserProfile,
+            as: 'profile',
+            where: Object.keys(profileWhere).length > 0 ? profileWhere : undefined,
+        }
+      ],
       limit: Number(limit),
       offset,
       attributes: { exclude: ['password'] },
@@ -317,19 +348,46 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
   });
 
   // GET /api/user/wishlist - Get wishlist
-  static getWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const wishlists = await Wishlist.findAll({
-      where: { user_id: req.userId! },
-      include: [{ association: 'profileUser', include: ['profile'] }],
-    });
+ static getWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.userId) {
+    return ResponseHelper.error(res, 'Unauthorized', 401);
+  }
 
-    return ResponseHelper.success(res, 'Wishlist retrieved', wishlists);
+  const wishlists = await Wishlist.findAll({
+    where: { user_id: req.userId },
+    order: [['createdAt', 'DESC']],
+    include: [
+      {
+        association: 'profileUser',
+        attributes: { exclude: ['password', 'otp', 'otp_expiry'] },
+        include: ['profile'],
+      },
+    ],
   });
+
+  return ResponseHelper.success(res, 'Wishlist retrieved', wishlists);
+});
+
 
   // POST /api/user/add/wishlist - Add to wishlist
   static addToWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { user_profile_id } = req.body;
-    await Wishlist.create({ user_id: req.userId!, user_profile_id });
+    
+    const [wishlist, created] = await Wishlist.findOrCreate({
+      where: { 
+        user_id: req.userId!, 
+        user_profile_id 
+      },
+      defaults: { 
+        user_id: req.userId!, 
+        user_profile_id 
+      }
+    });
+
+    if (!created) {
+        return ResponseHelper.success(res, 'Already in wishlist'); // Or handle as per UX preference
+    }
+
     return ResponseHelper.success(res, 'Added to wishlist');
   });
 
