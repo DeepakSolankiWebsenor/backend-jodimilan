@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package, Thikhana } from '../../models';
+import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package, Thikhana,State,Caste } from '../../models';
 import { EncryptionService } from '../../utils/encryption';
 import { Op } from 'sequelize';
 import { Helper } from '../../utils/helper';
@@ -43,81 +43,122 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 
   // POST /api/user/profile/update - Update profile
-  static updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const user = await User.findByPk(req.userId!);
-    
-    // Ensure UserProfile exists
-    const [profile] = await UserProfile.findOrCreate({
-        where: { user_id: req.userId! },
-        defaults: { user_id: req.userId! }
-    });
+ // POST /api/user/profile/update
+static updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.userId!;
+  console.log('================ UPDATE PROFILE START ================');
+  console.log('👤 USER ID =>', userId);
 
-    if (req.file) {
-      // If file uploaded to S3, update profile_photo
-      req.body.profile_photo = (req.file as any).location;
+  // Handle uploaded image
+  if (req.file) {
+    req.body.profile_photo = (req.file as any).location;
+  }
+
+  console.log('📦 RAW REQUEST BODY =>', req.body);
+
+  /* ================= FIELD SEPARATION ================= */
+  const userFields = [
+    'name',
+    'last_name',
+    'email',
+    'phone',
+    'dialing_code',
+    'profile_by',
+    'gender',
+    'mat_status',
+    'religion',
+    'caste',
+    'country',
+    'state',
+    'dob',
+    'profile_photo',
+    'partner_preferences',
+  ];
+
+  const userUpdate: any = {};
+  const profileUpdate: any = {};
+
+  Object.keys(req.body).forEach((key) => {
+    if (key === 'id') return; // never allow PK update
+
+    if (userFields.includes(key)) {
+      userUpdate[key] = req.body[key];
+    } else {
+      profileUpdate[key] = req.body[key];
     }
-
-    console.log("DEBUG: Profile Update Request Payload:", req.body);
-    console.log("DEBUG: User ID:", req.userId);
-
-    // Separate fields for User and UserProfile
-    const userFields = [
-        'name', 'last_name', 'email', 'phone', 'dialing_code', 
-        'profile_by', 'gender', 'mat_status', 'religion', 'caste', 
-        'country', 'state', 'dob', 'profile_photo', 'partner_preferences'
-    ];
-    
-    const userUpdate: any = {};
-    const profileUpdate: any = {};
-
-    Object.keys(req.body).forEach(key => {
-        if (key === 'id') return; // Skip primary key in updates
-        if (userFields.includes(key)) {
-            userUpdate[key] = req.body[key];
-        } else {
-            // Assume other fields go to Profile
-            profileUpdate[key] = req.body[key];
-        }
-    });
-
-    console.log("DEBUG: Separated User Update:", userUpdate);
-    console.log("DEBUG: Separated Profile Update:", profileUpdate);
-
-    if (Object.keys(userUpdate).length > 0) {
-        if (userUpdate.dob) {
-            userUpdate.age = moment().diff(moment(userUpdate.dob), 'years');
-        }
-        const [userAffected] = await User.update(userUpdate, { where: { id: req.userId! } });
-        console.log("DEBUG: User update rows affected:", userAffected);
-    }
-    
-    if (Object.keys(profileUpdate).length > 0) {
-        const [profileAffected] = await UserProfile.update(profileUpdate, { where: { user_id: req.userId! } });
-        console.log("DEBUG: Profile update rows affected:", profileAffected);
-    }
-
-    // Return updated and encrypted profile to keep frontend in sync
-    const updatedUser = await User.findByPk(req.userId!, {
-        include: [
-            {
-                model: UserProfile,
-                as: 'profile',
-                include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
-            },
-            'countryRelation', 'stateRelation', 'religionRelation',
-            'casteRelation', 'package', 'albums'
-        ],
-        attributes: { exclude: ['password'] },
-    });
-
-    console.log("DEBUG: Updated User Data from DB (Raw):", updatedUser?.toJSON());
-
-    const encryptedUser = EncryptionService.encrypt(updatedUser?.toJSON());
-
-    return ResponseHelper.success(res, 'Profile updated successfully', {
-        user: encryptedUser
-    });
   });
+
+  console.log('🟢 USER UPDATE PAYLOAD =>', userUpdate);
+  console.log('🟣 PROFILE UPDATE PAYLOAD =>', profileUpdate);
+
+  /* ================= UPDATE USER ================= */
+  if (Object.keys(userUpdate).length > 0) {
+    if (userUpdate.dob) {
+      userUpdate.age = moment().diff(moment(userUpdate.dob), 'years');
+    }
+
+    const [affected] = await User.update(userUpdate, {
+      where: { id: userId },
+    });
+
+    console.log('✅ USER ROWS UPDATED =>', affected);
+  }
+
+  /* ================= ENSURE PROFILE EXISTS ================= */
+  let profile = await UserProfile.findOne({
+    where: { user_id: userId },
+  });
+
+  if (!profile) {
+    console.log('🆕 CREATING USER PROFILE');
+    profile = await UserProfile.create({
+      user_id: userId,
+    });
+  }
+
+  /* ================= UPDATE PROFILE ================= */
+  if (Object.keys(profileUpdate).length > 0) {
+    await profile.update(profileUpdate);
+    console.log('✅ PROFILE UPDATED');
+  }
+
+  /* ================= FETCH UPDATED USER ================= */
+  const updatedUser = await User.findByPk(userId, {
+    include: [
+      {
+        model: UserProfile,
+        as: 'profile',
+        include: [
+          'thikhanaRelation',
+          'thikanaState',
+          'thikanaCity',
+          'thikanaArea',
+          'birthCountry',
+          'birthState',
+          'birthCity',
+        ],
+      },
+      'countryRelation',
+      'stateRelation',
+      'religionRelation',
+      'casteRelation',
+      'package',
+      'albums',
+    ],
+    attributes: { exclude: ['password'] },
+  });
+
+  console.log('📄 UPDATED USER (RAW) =>', updatedUser?.toJSON());
+
+  const encryptedUser = EncryptionService.encrypt(updatedUser?.toJSON());
+
+  console.log('================ UPDATE PROFILE END =================');
+
+  return ResponseHelper.success(res, 'Profile updated successfully', {
+    user: encryptedUser,
+  });
+});
+
 
   // POST /api/user/profile/update-partner-preferences
   static updatePartnerPreferences = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -257,64 +298,98 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
     return ResponseHelper.success(res, 'Account deleted successfully');
   });
 
+
+
   // GET /api/user/browseProfile - Browse profiles with filters
-  static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = 1, limit = 20, gender, mat_status, religion, caste, min_age, max_age, state, city, occupation } = req.query;
-    const { offset } = Helper.paginate(Number(page), Number(limit));
+static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
+  console.log('================ BROWSE PROFILE API HIT ================');
 
-    const where: any = { status: 'Active' };
-    if (gender) where.gender = gender;
-    if (mat_status) {
-        where.mat_status = Array.isArray(mat_status) ? { [Op.in]: mat_status } : mat_status;
-    }
-    if (religion) {
-        where.religion = Array.isArray(religion) ? { [Op.in]: religion } : religion;
-    }
-    if (caste) {
-        where.caste = Array.isArray(caste) ? { [Op.in]: caste } : caste;
-    }
-    if (state) {
-        where.state = Array.isArray(state) ? { [Op.in]: state } : state;
-    }
+  const {
+    page = 1,
+    limit = 20,
+    state, // actually RELIGION ID
+    caste,
+  } = req.query;
 
-    if (min_age || max_age) {
-      where.age = {};
-      if (min_age) where.age[Op.gte] = min_age;
-      if (max_age) where.age[Op.lte] = max_age;
-    }
+  console.log('🔍 RAW QUERY PARAMS =>', req.query);
 
-    // Profile filters
-    const profileWhere: any = {};
-    if (city) {
-        profileWhere.birth_city = Array.isArray(city) ? { [Op.in]: city } : city;
-    }
-    if (occupation) {
-        profileWhere.occupation = Array.isArray(occupation) ? { [Op.in]: occupation } : occupation;
-    }
+  const { offset } = Helper.paginate(Number(page), Number(limit));
 
-    // Exclude blocked profiles
-    const blocked = await BlockProfile.findAll({
-      where: { user_id: req.userId! },
-      attributes: ['block_profile_id'],
-    });
-    where.id = { [Op.notIn]: [req.userId!, ...blocked.map((b) => b.block_profile_id)] };
+  /* ================= BASE WHERE ================= */
+  const where: any = {
+    status: 'Active',
+  };
 
-    const { count, rows } = await User.findAndCountAll({
-      where,
-      include: [
-        {
-            model: UserProfile,
-            as: 'profile',
-            where: Object.keys(profileWhere).length > 0 ? profileWhere : undefined,
-        }
-      ],
-      limit: Number(limit),
-      offset,
-      attributes: { exclude: ['password'] },
-    });
+  /* ================= RELIGION FILTER (FROM state PARAM) ================= */
+  if (state) {
+    const religionIds = Array.isArray(state)
+      ? state.map(Number)
+      : [Number(state)];
 
-    return ResponseHelper.paginated(res, 'Profiles retrieved', rows, count, Number(page), Number(limit));
+    console.log('🆔 RELIGION IDS (FROM STATE PARAM) =>', religionIds);
+
+    where.religion = { [Op.in]: religionIds };
+  }
+
+  /* ================= CASTE FILTER ================= */
+  if (caste) {
+    const casteIds = Array.isArray(caste)
+      ? caste.map(Number)
+      : [Number(caste)];
+
+    console.log('🆔 CASTE IDS FROM FRONTEND =>', casteIds);
+
+    where.caste = { [Op.in]: casteIds };
+  }
+
+  console.log('🧱 USER WHERE AFTER FILTERS =>');
+  console.dir(where, { depth: null });
+
+  /* ================= BLOCKED + SELF ================= */
+  const blocked = await BlockProfile.findAll({
+    where: { user_id: req.userId! },
+    attributes: ['block_profile_id'],
+    raw: true,
   });
+
+  const blockedIds = blocked.map(b => b.block_profile_id);
+
+  where.id = {
+    [Op.notIn]: [req.userId!, ...blockedIds],
+  };
+
+  console.log('🧱 FINAL USER WHERE =>');
+  console.dir(where, { depth: null });
+
+  /* ================= QUERY ================= */
+  console.log('🚀 EXECUTING USER QUERY');
+
+  const { count, rows } = await User.findAndCountAll({
+    where,
+    limit: Number(limit),
+    offset,
+    distinct: true,
+    attributes: { exclude: ['password'] },
+  });
+
+  console.log('📊 TOTAL COUNT =>', count);
+  console.log('📦 ROWS RETURNED =>', rows.length);
+
+  return ResponseHelper.paginated(
+    res,
+    'Profiles retrieved',
+    rows,
+    count,
+    Number(page),
+    Number(limit)
+  );
+});
+
+
+
+
+
+
 
   // GET /api/user/daily/recommendation/profile - Daily recommendations
   static getDailyRecommendations = asyncHandler(async (req: AuthRequest, res: Response) => {
