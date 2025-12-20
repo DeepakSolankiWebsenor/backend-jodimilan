@@ -18,7 +18,7 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
       {
         model: UserProfile,
         as: 'profile',
-        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
+        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity', 'motherCaste', 'edCountry', 'edState', 'edCity']
       }, 
       'countryRelation', 'stateRelation', 'religionRelation',
       'casteRelation', 'package', 'albums'
@@ -136,6 +136,10 @@ static updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
           'birthCountry',
           'birthState',
           'birthCity',
+          'motherCaste',
+          'edCountry',
+          'edState',
+          'edCity',
         ],
       },
       'countryRelation',
@@ -216,7 +220,7 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
       {
         model: UserProfile,
         as: 'profile',
-        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity']
+        include: ['thikhanaRelation', 'thikanaState', 'thikanaCity', 'thikanaArea', 'birthCountry', 'birthState', 'birthCity', 'motherCaste', 'edCountry', 'edState', 'edCity']
       },
       'countryRelation', 'stateRelation', 'religionRelation',
       'casteRelation', 'package', 
@@ -301,49 +305,71 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
 
 
   // GET /api/user/browseProfile - Browse profiles with filters
+
+
 static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
   console.log('================ BROWSE PROFILE API HIT ================');
 
   const {
     page = 1,
     limit = 20,
-    state, // actually RELIGION ID
+    state,        // frontend → religion
     caste,
+    occupation,
+    city,         // birth_city
   } = req.query;
 
   console.log('🔍 RAW QUERY PARAMS =>', req.query);
 
   const { offset } = Helper.paginate(Number(page), Number(limit));
 
-  /* ================= BASE WHERE ================= */
-  const where: any = {
+  /* ================= USERS WHERE ================= */
+  const userWhere: any = {
     status: 'Active',
   };
 
-  /* ================= RELIGION FILTER (FROM state PARAM) ================= */
+  // frontend "state" is actually religion
   if (state) {
     const religionIds = Array.isArray(state)
       ? state.map(Number)
       : [Number(state)];
 
-    console.log('🆔 RELIGION IDS (FROM STATE PARAM) =>', religionIds);
-
-    where.religion = { [Op.in]: religionIds };
+    userWhere.religion = { [Op.in]: religionIds };
   }
 
-  /* ================= CASTE FILTER ================= */
   if (caste) {
     const casteIds = Array.isArray(caste)
       ? caste.map(Number)
       : [Number(caste)];
 
-    console.log('🆔 CASTE IDS FROM FRONTEND =>', casteIds);
-
-    where.caste = { [Op.in]: casteIds };
+    userWhere.caste = { [Op.in]: casteIds };
   }
 
-  console.log('🧱 USER WHERE AFTER FILTERS =>');
-  console.dir(where, { depth: null });
+  console.log('🧱 USER WHERE =>');
+  console.dir(userWhere, { depth: null });
+
+  /* ================= USER_PROFILE WHERE ================= */
+  const profileWhere: any = {};
+
+if (occupation) {
+  const occupations = Array.isArray(occupation)
+    ? occupation
+    : [occupation];
+
+  // IMPORTANT FIX
+  profileWhere.employeed_in = { [Op.in]: occupations };
+}
+
+if (city) {
+  const cityIds = Array.isArray(city)
+    ? city.map(Number)
+    : [Number(city)];
+
+  profileWhere.birth_city = { [Op.in]: cityIds };
+}
+
+  console.log('🧱 PROFILE WHERE =>');
+  console.dir(profileWhere, { depth: null });
 
   /* ================= BLOCKED + SELF ================= */
   const blocked = await BlockProfile.findAll({
@@ -354,26 +380,36 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   const blockedIds = blocked.map(b => b.block_profile_id);
 
-  where.id = {
+  userWhere.id = {
     [Op.notIn]: [req.userId!, ...blockedIds],
   };
 
   console.log('🧱 FINAL USER WHERE =>');
-  console.dir(where, { depth: null });
+  console.dir(userWhere, { depth: null });
 
   /* ================= QUERY ================= */
-  console.log('🚀 EXECUTING USER QUERY');
+  console.log('🚀 EXECUTING USER + PROFILE JOIN QUERY');
 
   const { count, rows } = await User.findAndCountAll({
-    where,
+    where: userWhere,
+    include: [
+      {
+        model: UserProfile,
+        as: 'profile',
+        required: true, // 🔥 IMPORTANT: must match user_profiles
+        where: Object.keys(profileWhere).length > 0 ? profileWhere : undefined,
+      },
+    ],
     limit: Number(limit),
     offset,
     distinct: true,
     attributes: { exclude: ['password'] },
   });
 
-  console.log('📊 TOTAL COUNT =>', count);
+  console.log('📊 TOTAL USERS =>', count);
   console.log('📦 ROWS RETURNED =>', rows.length);
+
+  console.log('================ END BROWSE PROFILE API ================');
 
   return ResponseHelper.paginated(
     res,
@@ -384,6 +420,7 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     Number(limit)
   );
 });
+
 
 
 
@@ -430,7 +467,7 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   const wishlists = await Wishlist.findAll({
     where: { user_id: req.userId },
-    order: [['createdAt', 'DESC']],
+    order: [['created_at', 'DESC']],
     include: [
       {
         association: 'profileUser',

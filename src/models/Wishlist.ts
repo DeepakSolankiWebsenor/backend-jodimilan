@@ -4,6 +4,8 @@ import { User } from './User';
 @Table({
   tableName: 'wishlists',
   timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   indexes: [
     {
       unique: true,
@@ -12,14 +14,13 @@ import { User } from './User';
   ],
 })
 export class Wishlist extends Model {
-@Column({
-  type: DataType.BIGINT,
-  primaryKey: true,
-  autoIncrement: true,
-  allowNull: false,
-})
-id!: number;
-
+  @Column({
+    type: DataType.BIGINT,
+    primaryKey: true,
+    autoIncrement: true,
+    allowNull: false,
+  })
+  id!: number;
 
   @ForeignKey(() => User)
   @Column({ type: DataType.BIGINT, allowNull: false })
