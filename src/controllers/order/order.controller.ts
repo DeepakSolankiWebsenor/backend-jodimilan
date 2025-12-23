@@ -68,6 +68,20 @@ export class OrderController {
       return ResponseHelper.notFound(res, 'Order not found');
     }
 
+    // Notification trigger for Membership Purchase/Checkout
+    const { NotificationService } = await import('../../services/notification.service');
+    await NotificationService.createNotification(
+        req.userId!,
+        'order_checkout',
+        {
+            topic: 'Order Checkout Initiated',
+            message: `You have initiated checkout for order #${order.order_number}.`,
+            name: 'System'
+        },
+        'Order',
+        order.id
+    );
+
     return ResponseHelper.success(res, 'Proceed to payment', { order });
   });
 
@@ -110,7 +124,7 @@ export class OrderController {
 
     user.package_id = pkg.id;
     user.package_expiry = endDate;
-    // user.total_profile_view_count = pkg.total_profile_view;
+    user.total_profile_view_count = parseInt(pkg.total_profile_view) || 0;
     await user.save();
 
     // Create package payment record
@@ -279,6 +293,7 @@ console.log("User found:", user);
 
       user.package_id = pkg.id;
       user.package_expiry = endDate;
+      user.total_profile_view_count = parseInt(pkg.total_profile_view) || 0;
       await user.save();
 
       // Save payment record properly
@@ -294,6 +309,21 @@ console.log("User found:", user);
       });
 
       console.log("🎉 Subscription Activated!");
+      console.log("🎉 Subscription Activated!");
+
+      // Send Membership Notification
+      const { NotificationService } = await import('../../services/notification.service');
+      await NotificationService.createNotification(
+        user.id,
+        'membership_purchased',
+        {
+          topic: 'Membership Purchased',
+          message: `You have successfully purchased the ${pkg.package_title} membership.`,
+          name: 'System'
+        },
+        'PackagePayment',
+        order.id
+      );
     }
 
     return res.status(200).json({ status: "success" });

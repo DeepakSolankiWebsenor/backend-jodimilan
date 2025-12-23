@@ -27,7 +27,7 @@ router.get('/thikhana/search', CommonController.searchThikana);
 router.get('/thikhana-searchByName', CommonController.searchThikanaByName);
 router.get('/thikhana/:id', CommonController.getThikanaById);
 router.get('/serachById', CommonController.searchByRytId);
-router.get('/userprofiles', ProfileController.getUserProfiles);
+router.get('/userprofiles', optionalAuth, ProfileController.getUserProfiles);
 
 // Public auth routes (under /user prefix)
 router.post('/customer/signup', AuthController.signup);
@@ -175,11 +175,26 @@ router.get('/notifications', async (req: any, res) => {
     order: [['created_at', 'DESC']],
     limit: 50,
   });
-  return ResponseHelper.success(res, 'Notifications retrieved', notifications);
+
+  // Count unread
+  const unreadCount = await Notification.count({
+    where: {
+      user_id: req.userId,
+      read_at: null
+    }
+  });
+
+  return ResponseHelper.success(res, 'Notifications retrieved', { notifications, unreadCount });
+});
+
+router.post('/notifications/read-all', async (req: any, res) => {
+  const { NotificationService } = await import('../services/notification.service');
+  await NotificationService.markAllAsRead(req.userId);
+  return ResponseHelper.success(res, 'All notifications marked as read');
 });
 
 router.get('/readnotifications/:id', async (req: any, res) => {
-  await Notification.update({ is_read: true }, { where: { id: req.params.id } });
+  await Notification.update({ read_at: new Date() }, { where: { id: req.params.id } });
   return ResponseHelper.success(res, 'Notification marked as read');
 });
 

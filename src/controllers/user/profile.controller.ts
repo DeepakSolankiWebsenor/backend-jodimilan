@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package, Thikhana,State,Caste } from '../../models';
+import { User, UserProfile, Wishlist, BlockProfile, FriendRequest, UserAlbum, PackagePayment, Package, Thikhana,State,Caste, UserViewedProfile } from '../../models';
 import { EncryptionService } from '../../utils/encryption';
 import { Op } from 'sequelize';
 import { Helper } from '../../utils/helper';
@@ -23,16 +23,13 @@ static getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
       'countryRelation', 'stateRelation', 'religionRelation',
       'casteRelation', 'package', 'albums'
     ],
-    attributes: { exclude: ['password'] },
+    attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
   });
 
   if (!user) return ResponseHelper.error(res, 'User not found');
 
   const userData = user.toJSON();
-  console.log("DEBUG: getProfile - Returning User Data:", {
-      id: userData.id,
-      partner_preferences: userData.partner_preferences
-  });
+  console.log("💎 Profile retrieved for user ID:", userData.id, "| Package:", userData.package_id);
 
   const encryptedUser = EncryptionService.encrypt(userData);
 
@@ -149,7 +146,7 @@ static updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
       'package',
       'albums',
     ],
-    attributes: { exclude: ['password'] },
+    attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
   });
 
   console.log('📄 UPDATED USER (RAW) =>', updatedUser?.toJSON());
@@ -213,9 +210,15 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
     return ResponseHelper.error(res, "RYT ID is required");
   }
 
+  // Membership check for viewer
+  const viewer = await User.findByPk(req.userId!);
+  if (!viewer?.package_id) {
+    return ResponseHelper.error(res, "without membership not able to see view details", 403);
+  }
+
   const user = await User.findOne({
     where: { ryt_id: rytId },
-    attributes: { exclude: ["password", "otp"] },
+    attributes: { exclude: ["password", "user_password", "otp", "otp_expiry", "otp_attempts"] },
     include: [
       {
         model: UserProfile,
@@ -233,12 +236,61 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
   if (!user) {
     return ResponseHelper.notFound(res, "User not found");
   }
-console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
 
-  const encrypted = EncryptionService.encrypt(user.toJSON());
+  // Track unique profile view and decrement count
+  const alreadyViewed = await UserViewedProfile.findOne({
+    where: {
+      viewer_id: req.userId!,
+      viewed_id: user.id
+    }
+  });
+
+  if (!alreadyViewed) {
+    // Check if viewer has views remaining
+    if (viewer.total_profile_view_count <= 0) {
+      return ResponseHelper.error(res, 'Insufficient profile views. Please upgrade your package.', 403);
+    }
+
+    // Decrement view count
+    viewer.total_profile_view_count -= 1;
+    await viewer.save();
+
+    // Record this view
+    await UserViewedProfile.create({
+      viewer_id: req.userId!,
+      viewed_id: user.id
+    });
+
+    console.log(`✅ Profile view recorded: User ${req.userId} viewed ${user.ryt_id}. Remaining views: ${viewer.total_profile_view_count}`);
+  } else {
+    console.log(`ℹ️ Profile already viewed: User ${req.userId} has already viewed ${user.ryt_id}`);
+  }
+
+  const shortlist = await Wishlist.findOne({
+    where: { user_id: req.userId!, user_profile_id: user.id }
+  });
+
+  const friendRequest = await FriendRequest.findOne({
+    where: {
+      [Op.or]: [
+        { user_id: req.userId!, request_profile_id: user.id },
+        { user_id: user.id, request_profile_id: req.userId! }
+      ]
+    }
+  });
+
+  const userData = user.toJSON() as any;
+  userData.shortlist_profile_id = shortlist ? shortlist.id : null;
+  userData.friend_request_sent = friendRequest ? (friendRequest.user_id === req.userId && friendRequest.status === 'No') : false;
+  userData.friend_request_approved = friendRequest ? friendRequest.status === 'Yes' : false;
+
+  console.log("🔐 USER BEFORE ENCRYPTION:", userData);
+
+  const encrypted = EncryptionService.encrypt(userData);
 
   return ResponseHelper.success(res, "Profile retrieved successfully", {
-    user: encrypted
+    user: encrypted,
+    remaining_views: viewer.total_profile_view_count
   });
 });
 
@@ -246,22 +298,48 @@ console.log("🔐 USER BEFORE ENCRYPTION:", user.toJSON());
   // GET /api/user/view-contact/:id - View contact (decrements view count)
   static viewContact = asyncHandler(async (req: AuthRequest, res: Response) => {
     const profileId = parseInt(req.params.id);
-    const viewer = await User.findByPk(req.userId!);
+    const viewerId = req.userId!;
+    
+    const viewer = await User.findByPk(viewerId);
+    if (!viewer) return ResponseHelper.error(res, 'User not found');
 
-    if (!viewer || viewer.total_profile_view_count <= 0) {
-      return ResponseHelper.error(res, 'Insufficient profile views. Please upgrade your package.');
+    if (!viewer.package_id) {
+        return ResponseHelper.error(res, 'without membership not able to see view details', 403);
     }
 
-    viewer.total_profile_view_count -= 1;
-    await viewer.save();
+    // Check if this profile was already viewed by this user
+    const alreadyViewed = await UserViewedProfile.findOne({
+      where: {
+        viewer_id: viewerId,
+        viewed_id: profileId
+      }
+    });
+
+    if (!alreadyViewed) {
+      if (viewer.total_profile_view_count <= 0) {
+        return ResponseHelper.error(res, 'Insufficient profile views. Please upgrade your package.');
+      }
+
+      viewer.total_profile_view_count -= 1;
+      await viewer.save();
+
+      await UserViewedProfile.create({
+        viewer_id: viewerId,
+        viewed_id: profileId
+      });
+    }
 
     const targetUser = await User.findByPk(profileId, {
       include: ['profile'],
-      attributes: { exclude: ['password'] },
+      attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
     });
 
-    return ResponseHelper.success(res, 'Contact viewed', { user: targetUser, remaining_views: viewer.total_profile_view_count });
+    return ResponseHelper.success(res, 'Contact viewed', { 
+      user: targetUser, 
+      remaining_views: viewer.total_profile_view_count 
+    });
   });
+
 
   // POST /api/user/album/images/upload - Upload album images
   static uploadAlbumImages = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -372,17 +450,19 @@ if (city) {
   console.dir(profileWhere, { depth: null });
 
   /* ================= BLOCKED + SELF ================= */
-  const blocked = await BlockProfile.findAll({
-    where: { user_id: req.userId! },
-    attributes: ['block_profile_id'],
-    raw: true,
-  });
+  if (req.userId) {
+    const blocked = await BlockProfile.findAll({
+      where: { user_id: req.userId },
+      attributes: ['block_profile_id'],
+      raw: true,
+    });
 
-  const blockedIds = blocked.map(b => b.block_profile_id);
+    const blockedIds = blocked.map(b => b.block_profile_id);
 
-  userWhere.id = {
-    [Op.notIn]: [req.userId!, ...blockedIds],
-  };
+    userWhere.id = {
+      [Op.notIn]: [req.userId, ...blockedIds],
+    };
+  }
 
   console.log('🧱 FINAL USER WHERE =>');
   console.dir(userWhere, { depth: null });
@@ -403,7 +483,7 @@ if (city) {
     limit: Number(limit),
     offset,
     distinct: true,
-    attributes: { exclude: ['password'] },
+    attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
   });
 
   console.log('📊 TOTAL USERS =>', count);
@@ -453,7 +533,7 @@ if (city) {
       include: ['profile'],
       limit: 10,
       order: [['created_at', 'DESC']],
-      attributes: { exclude: ['password'] },
+      attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
     });
 
     return ResponseHelper.success(res, 'Recommendations retrieved', profiles);
@@ -471,8 +551,17 @@ if (city) {
     include: [
       {
         association: 'profileUser',
-        attributes: { exclude: ['password', 'otp', 'otp_expiry'] },
-        include: ['profile'],
+        attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
+        include: [
+          {
+            model: UserProfile,
+            as: 'profile',
+            include: ['birthCity', 'birthState', 'birthCountry']
+          },
+          'stateRelation',
+          'casteRelation',
+          'religionRelation'
+        ],
       },
     ],
   });
@@ -483,21 +572,44 @@ if (city) {
 
   // POST /api/user/add/wishlist - Add to wishlist
   static addToWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { user_profile_id } = req.body;
+    const user_profile_id = Number(req.body.user_profile_id);
+    const user_id = Number(req.userId);
+
+    if (isNaN(user_profile_id)) {
+      return ResponseHelper.error(res, 'Invalid profile ID', 400);
+    }
     
     const [wishlist, created] = await Wishlist.findOrCreate({
       where: { 
-        user_id: req.userId!, 
+        user_id, 
         user_profile_id 
       },
       defaults: { 
-        user_id: req.userId!, 
+        user_id, 
         user_profile_id 
       }
     });
 
     if (!created) {
-        return ResponseHelper.success(res, 'Already in wishlist'); // Or handle as per UX preference
+        return ResponseHelper.success(res, 'You are Already Shortlisted this user'); // Or handle as per UX preference
+    }
+
+    const { NotificationService } = await import('../../services/notification.service');
+    // Notify the ACTOR (User who shortlisted) -> "Shortlisted user like you have shortlist this user"
+    // Fetch profile user name to make it personal
+    const profileUser = await User.findByPk(user_profile_id);
+    if (profileUser) {
+        await NotificationService.createNotification(
+            user_id,
+            'shortlist',
+            {
+                topic: 'Shortlisted User',
+                message: `You have shortlisted ${profileUser.name || 'a user'}.`,
+                name: 'System'
+            },
+            'Wishlist',
+            wishlist.id
+        );
     }
 
     return ResponseHelper.success(res, 'Added to wishlist');
@@ -539,14 +651,36 @@ if (city) {
   // GET /api/user/userprofiles - Get user profiles list
   static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
+    const userId = req.userId;
+
+    const where: any = { status: 'Active' };
+
+    // Exclude self and blocked profiles
+    if (userId) {
+      const blocked = await BlockProfile.findAll({
+        where: { user_id: userId },
+        attributes: ['block_profile_id'],
+        raw: true,
+      });
+      const blockedIds = blocked.map((b) => b.block_profile_id);
+      where.id = { [Op.notIn]: [userId, ...blockedIds] };
+    }
+
     const { count, rows } = await User.findAndCountAll({
-      where: { status: 'Active' },
-      include: ['profile'],
+      where,
+      include: [
+        {
+          model: UserProfile,
+          as: 'profile',
+          include: ['birthCity', 'birthState', 'birthCountry']
+        },
+        'stateRelation',
+        'casteRelation'
+      ],
       limit: Number(limit),
       offset: (Number(page) - 1) * Number(limit),
-      attributes: { exclude: ['password', 'otp'] },
+      attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
     });
-
     return ResponseHelper.paginated(res, 'User profiles retrieved', rows, count, Number(page), Number(limit));
   });
 

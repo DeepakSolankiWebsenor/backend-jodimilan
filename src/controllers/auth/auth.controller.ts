@@ -57,6 +57,20 @@ static signup = asyncHandler(async (req: AuthRequest, res: Response) => {
     if (user) {
       // Add full user data to response (overwrite encrypted string)
       (result.data as any).user = user.toJSON();
+
+      // Send Login Notification
+      const { NotificationService } = await import('../../services/notification.service');
+      await NotificationService.createNotification(
+        userId, 
+        'system_alert', 
+        { 
+          topic: 'Login Alert', 
+          message: `You logged in at ${new Date().toLocaleString()}`,
+          name: 'System' 
+        },
+        'System',
+        0
+      );
     }
   }
 
@@ -148,6 +162,19 @@ static changePassword = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   try {
     await AuthService.changePassword(req.userId!, current_password, new_password);
+
+    // Send Change Password Notification
+    const { NotificationService } = await import('../../services/notification.service');
+    await NotificationService.createNotification(
+      req.userId!, 
+      'system_alert', 
+      { 
+        topic: 'Password Changed', 
+        message: `Your password was changed on ${new Date().toLocaleString()}`,
+        name: 'System' 
+      }
+    );
+
     return ResponseHelper.success(res, "Password changed successfully");
   } catch (error: any) {
     return ResponseHelper.error(res, error.message, 400);
@@ -162,6 +189,21 @@ static changePassword = asyncHandler(async (req: AuthRequest, res: Response) => 
   static logout = asyncHandler(async (req: AuthRequest, res: Response) => {
     // In JWT, we don't need to do anything server-side
     // Client should remove the token
+
+    // Optionally fetch user ID if we want to log logout, but req.userId should constitute enough
+    if (req.userId) {
+       const { NotificationService } = await import('../../services/notification.service');
+       await NotificationService.createNotification(
+        req.userId, 
+        'system_alert', 
+        { 
+          topic: 'Logout Alert', 
+          message: `You were logged out at ${new Date().toLocaleString()}`,
+          name: 'System' 
+        }
+       );
+    }
+
     return ResponseHelper.success(res, 'Logged out successfully');
   });
 
@@ -279,6 +321,17 @@ static resendEmailOtp = asyncHandler(async (
   static verifyOtp = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { otp } = req.body;
     await AuthService.verifyPhone(req.userId!, otp);
+
+    const { NotificationService } = await import('../../services/notification.service');
+    await NotificationService.createNotification(
+      req.userId!, 
+      'system_alert', 
+      { 
+        topic: 'Profile Updated', 
+        message: `Your mobile/email was updated successfully on ${new Date().toLocaleString()}`,
+        name: 'System' 
+      }
+    );
 
     return ResponseHelper.success(res, 'Verified successfully');
   });

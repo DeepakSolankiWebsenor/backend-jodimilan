@@ -7,6 +7,7 @@ import { Op } from 'sequelize';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
+  activeSessions?: Set<number>; // Track which sessions this socket has joined
 }
 
 interface TypingData {
@@ -73,16 +74,62 @@ export class SocketServer {
       // Notify friends that user is online
       await this.notifyFriendsOnlineStatus(userId, true);
 
-      // Handle joining chat sessions
+      // Handle joining chat sessions with validation
       socket.on('join:session', async (sessionId: number) => {
-        socket.join(`session:${sessionId}`);
-        console.log(`User ${userId} joined session ${sessionId}`);
+        try {
+          // 🔒 SECURITY: Validate user is a participant in this session
+          const session = await Session.findByPk(sessionId);
+          
+          if (!session) {
+            console.error(`❌ Session ${sessionId} not found`);
+            socket.emit('error', { message: 'Session not found' });
+            return;
+          }
+
+          // Check if user is participant (user1 or user2)
+          const isParticipant = session.user1_id === userId || session.user2_id === userId;
+          
+          if (!isParticipant) {
+            console.error(`🚨 SECURITY: User ${userId} attempted to join session ${sessionId} they're not part of!`);
+            socket.emit('error', { message: 'Unauthorized: You are not a participant in this session' });
+            return;
+          }
+
+          // Initialize activeSessions set if not exists
+          if (!socket.activeSessions) {
+            socket.activeSessions = new Set<number>();
+          }
+
+          // Leave all previous sessions (user should only be in one chat at a time)
+          socket.activeSessions.forEach(prevSessionId => {
+            socket.leave(`session:${prevSessionId}`);
+            console.log(`🚪 User ${userId} left previous session ${prevSessionId}`);
+          });
+
+          // Clear the set and add new session
+          socket.activeSessions.clear();
+          socket.activeSessions.add(sessionId);
+
+          // Join the new session room
+          socket.join(`session:${sessionId}`);
+          console.log(`✅ User ${userId} joined session ${sessionId} (validated)`);
+          
+        } catch (error) {
+          console.error('Error joining session:', error);
+          socket.emit('error', { message: 'Failed to join session' });
+        }
       });
 
       // Handle leaving chat sessions
       socket.on('leave:session', (sessionId: number) => {
         socket.leave(`session:${sessionId}`);
-        console.log(`User ${userId} left session ${sessionId}`);
+        
+        // Remove from active sessions tracking
+        if (socket.activeSessions) {
+          socket.activeSessions.delete(sessionId);
+        }
+        
+        console.log(`🚪 User ${userId} left session ${sessionId}`);
       });
 
       // Handle typing indicators
@@ -195,6 +242,15 @@ export class SocketServer {
       socket.on('disconnect', async () => {
         console.log(`❌ User ${userId} disconnected`);
         
+        // Leave all active sessions
+        if (socket.activeSessions) {
+          socket.activeSessions.forEach(sessionId => {
+            socket.leave(`session:${sessionId}`);
+            console.log(`🚪 User ${userId} left session ${sessionId} on disconnect`);
+          });
+          socket.activeSessions.clear();
+        }
+        
         // Update user presence
         await this.updateUserPresence(userId, undefined, false);
 
@@ -252,9 +308,25 @@ export class SocketServer {
     }
   }
 
-  // Method to emit new message to recipient
-  public emitNewMessage(sessionId: number, message: any) {
-    this.io.to(`session:${sessionId}`).emit('message:new', message);
+  // Method to emit new message to recipient with validation
+  public async emitNewMessage(sessionId: number, message: any) {
+    try {
+      // 🔒 SECURITY: Validate session exists and get participants
+      const session = await Session.findByPk(sessionId);
+      
+      if (!session) {
+        console.error(`❌ Cannot emit message: Session ${sessionId} not found`);
+        return;
+      }
+
+      console.log(`📤 Emitting message to session ${sessionId} participants: ${session.user1_id}, ${session.user2_id}`);
+      
+      // Emit to session room (only users who properly joined with validation will receive)
+      this.io.to(`session:${sessionId}`).emit('message:new', message);
+      
+    } catch (error) {
+      console.error('Error emitting new message:', error);
+    }
   }
 
   // Method to get Socket.IO instance

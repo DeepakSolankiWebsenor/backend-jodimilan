@@ -9,13 +9,18 @@ import { getSocketServer } from '../../socket';
 export class ChatController {
   // POST /api/user/session/create - Create or get chat session
   static createSession = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { user_id } = req.body;
+    const { user_id, friend_id } = req.body;
+    const targetUserId = user_id || friend_id;
+
+    if (!targetUserId) {
+      return ResponseHelper.error(res, 'User ID or Friend ID is required', 400);
+    }
 
     let session = await Session.findOne({
       where: {
         [Op.or]: [
-          { user1_id: req.userId!, user2_id: user_id },
-          { user1_id: user_id, user2_id: req.userId! },
+          { user1_id: req.userId!, user2_id: targetUserId },
+          { user1_id: targetUserId, user2_id: req.userId! },
         ],
       },
     });
@@ -23,7 +28,7 @@ export class ChatController {
     if (!session) {
       session = await Session.create({
         user1_id: req.userId!,
-        user2_id: user_id,
+        user2_id: targetUserId,
         block: {},
       });
     }
@@ -128,7 +133,20 @@ export class ChatController {
       return ResponseHelper.notFound(res, 'Session not found');
     }
 
+    // 🔒 SECURITY: Validate sender is a participant in this session
+    const isParticipant = sessionData.user1_id === req.userId! || sessionData.user2_id === req.userId!;
+    if (!isParticipant) {
+      console.error(`🚨 SECURITY: User ${req.userId} attempted to send message to session ${session} they're not part of!`);
+      return ResponseHelper.error(res, 'Unauthorized: You are not a participant in this session', 403);
+    }
+
     const toUserId = sessionData.user1_id === req.userId! ? sessionData.user2_id : sessionData.user1_id;
+
+    // Membership check for sender
+    const sender = await User.findByPk(req.userId!);
+    if (!sender?.package_id) {
+      return ResponseHelper.error(res, "without membership not able to see view details", 403);
+    }
 
     const chat = await Chat.create({
       session_id: Number(session),

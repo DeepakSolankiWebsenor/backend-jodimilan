@@ -6,6 +6,15 @@ import { Country, State, City, Area, Religion, Caste, Banner, Cms, Package, Cate
 import { Op } from 'sequelize';
 import { customConfig } from '../../config/custom';
 
+
+
+const CMS_SLUG_MAP: Record<string, string> = {
+  about: 'about-myshaadi',
+  privacy: 'privacy-policy',
+  refund: 'refund-and-cancellation',
+  terms: 'terms-and-conditions',
+};
+
 export class CommonController {
   // GET /api/user/state/:country_code - Get states by country
   static getStates = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -85,19 +94,31 @@ export class CommonController {
   });
 
   // GET /api/user/cms/:slug
+
 static getCmsPage = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const slug = req.params.slug || req.params.type; // Fallback support
+  const param = req.params.type?.toLowerCase();
 
-  console.log('Slug:', slug);
+  if (!param) {
+    return ResponseHelper.error(res, 'CMS param required', 400);
+  }
 
-  if (!slug) return ResponseHelper.error(res, 'Slug is required', 400);
+  const finalSlug = CMS_SLUG_MAP[param] || param;
 
   const page = await Cms.findOne({
-    where: { slug, status: 'Active' },
+    where: {
+      slug: finalSlug,
+      status: 'Active',
+    },
   });
+
+  if (!page) {
+    return ResponseHelper.error(res, 'CMS page not found', 404);
+  }
 
   return ResponseHelper.success(res, 'CMS page retrieved', page);
 });
+
+
 
 
 

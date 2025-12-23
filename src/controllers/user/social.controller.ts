@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { FriendRequest, User, Notification,Session } from '../../models';
+import { FriendRequest, User, UserProfile, Notification, Session } from '../../models';
 import { SmsService } from '../../utils/sms';
 import { FirebaseService } from '../../utils/firebase';
 import { Helper } from '../../utils/helper';
@@ -18,7 +18,7 @@ export class SocialController {
     });
 
     if (existing) {
-      return ResponseHelper.error(res, 'Friend request already sent');
+      return ResponseHelper.success(res, 'Interest Request already sent to this user');
     }
 
     const friendRequest = await FriendRequest.create({
@@ -44,13 +44,21 @@ export class SocialController {
       );
 
       // Save notification
-    await Notification.create({
-  user_id: recipient.id,
-  type: 'friend_request',
-  notifiable_type: 'FriendRequest',
-  notifiable_id: friendRequest.id.toString(), // ensure string
-  data: JSON.stringify({ sender_id: sender.id }),
-});
+      // Save notification
+      const { NotificationService } = await import('../../services/notification.service');
+      await NotificationService.createNotification(
+        recipient.id,
+        'friend_request',
+        {
+          topic: 'New Interest Received',
+          message: `${sender.name} sent you an interest request.`,
+          name: sender.name,
+          sender_id: sender.id,
+          avatar: sender.profile_photo // Assuming profile_photo exists on User model directly or via relation logic
+        },
+        'FriendRequest',
+        friendRequest.id
+      );
 
     }
 
@@ -61,7 +69,22 @@ export class SocialController {
   static getReceivedRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
     const requests = await FriendRequest.findAll({
       where: { request_profile_id: req.userId!, status: 'No' },
-      include: [{ association: 'user', include: ['profile'] }],
+      include: [
+        {
+          association: 'user',
+          attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry'] },
+          include: [
+            {
+               model: UserProfile,
+               as: 'profile',
+               include: ['birthCity', 'birthState', 'birthCountry']
+            },
+            'stateRelation',
+            'casteRelation',
+            'religionRelation'
+          ],
+        },
+      ],
       order: [['created_at', 'DESC']],
     });
 
@@ -120,17 +143,20 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
     });
 
     if (!existingNoti) {
-      await Notification.create({
-        user_id: userB.id,
-        type: 'friend_accept',
-        notifiable_type: 'friend_request',
-        notifiable_id: friendRequest.id,
-        data: JSON.stringify({
-          acceptor_id: userA.id,
+      const { NotificationService } = await import('../../services/notification.service');
+      await NotificationService.createNotification(
+        userB.id,
+        'friend_accept',
+        {
+          topic: 'Interest Accepted',
+          message: `${userA.name} accepted your interest request.`,
           name: userA.name,
-          ryt_id: userA.ryt_id,
-        }),
-      });
+          acceptor_id: userA.id,
+          ryt_id: userA.ryt_id
+        },
+        'FriendRequest',
+        friendRequest.id
+      );
     }
 
     // 👇 SAFE CHAT SESSION CREATION 👇
@@ -162,12 +188,42 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
   static getAcceptedRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
     const sent = await FriendRequest.findAll({
       where: { user_id: req.userId!, status: 'Yes' },
-      include: [{ association: 'friend', include: ['profile'] }],
+      include: [
+        {
+          association: 'friend',
+          attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry'] },
+          include: [
+            {
+              model: UserProfile,
+              as: 'profile',
+              include: ['birthCity', 'birthState', 'birthCountry'],
+            },
+            'stateRelation',
+            'casteRelation',
+            'religionRelation',
+          ],
+        },
+      ],
     });
 
     const received = await FriendRequest.findAll({
       where: { request_profile_id: req.userId!, status: 'Yes' },
-      include: [{ association: 'user', include: ['profile'] }],
+      include: [
+        {
+          association: 'user',
+          attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry'] },
+          include: [
+            {
+              model: UserProfile,
+              as: 'profile',
+              include: ['birthCity', 'birthState', 'birthCountry'],
+            },
+            'stateRelation',
+            'casteRelation',
+            'religionRelation',
+          ],
+        },
+      ],
     });
 
     return ResponseHelper.success(res, 'Friends retrieved', { sent, received });
@@ -177,7 +233,22 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
   static getPendingRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
     const requests = await FriendRequest.findAll({
       where: { user_id: req.userId!, status: 'No' },
-      include: [{ association: 'friend', include: ['profile'] }],
+      include: [
+        {
+          association: 'friend',
+          attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry'] },
+          include: [
+            {
+              model: UserProfile,
+              as: 'profile',
+              include: ['birthCity', 'birthState', 'birthCountry']
+            },
+            'stateRelation',
+            'casteRelation',
+            'religionRelation'
+          ]
+        }
+      ],
       order: [['created_at', 'DESC']],
     });
 
@@ -195,8 +266,11 @@ static declineFriendRequest = asyncHandler(async (req: AuthRequest, res: Respons
   const deletedCount = await FriendRequest.destroy({
     where: {
       id: request_id,
-      user_id: req.userId, // 👈 correct the field here
-      status: 'No' // ensure only pending requests can be canceled
+      [Op.or]: [
+        { request_profile_id: req.userId },
+        { user_id: req.userId }
+      ],
+      status: 'No'
     },
   });
 
@@ -217,13 +291,19 @@ static declineFriendRequest = asyncHandler(async (req: AuthRequest, res: Respons
     const recipient = await User.findByPk(profile_id);
 
     if (sender && recipient) {
-      await Notification.create({
-        user_id: recipient.id,
-        type: 'photo_request',
-        title: 'Photo Request',
-        message: `${sender.name} requested to view your photos`,
-        data: { sender_id: sender.id },
-      });
+      const { NotificationService } = await import('../../services/notification.service');
+      await NotificationService.createNotification(
+        recipient.id,
+        'photo_request',
+        {
+            topic: 'Photo Request',
+            message: `${sender.name} requested to view your photos`,
+            name: sender.name,
+            sender_id: sender.id
+        },
+        'PhotoRequest',
+        0 
+      );
 
       await FirebaseService.sendNotification(
         recipient.id,

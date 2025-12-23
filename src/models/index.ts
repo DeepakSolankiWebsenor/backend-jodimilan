@@ -31,4 +31,5 @@ export * from './Thikhana';
 export * from './Enquiry';
 export * from './Address';
 export * from './Cart';
+export * from './UserViewedProfile';
 

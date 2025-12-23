@@ -31,7 +31,7 @@ static async signup(data: any) {
   const rytId = Helper.generateRytId();
 
   // 👉 Generate OTP
-  const otp = '123456'; // Hardcoded as per requirement for now
+  const otp = Helper.generateOtp(); // Random 6 digit OTP
   const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
 
   const user = await User.create({
@@ -61,8 +61,9 @@ static async signup(data: any) {
     otp_last_sent: new Date(),
   });
 
-  // 👉 Send OTP via SMS (Placeholder)
-  await sendSmsOtp(user.phone, otp);
+  // 👉 Send OTP via SMS
+  const fullPhone = Helper.formatPhoneNumber(user.dialing_code || "91", user.phone);
+  await sendSmsOtp(fullPhone, otp);
 
   // Maintain Email Service but don't use it for verification yet
   // await EmailService.sendOtp(user.email, user.name, otp.toString());
@@ -132,7 +133,7 @@ static async login(identifier: string, password: string, dialingCode?: string) {
     if (!user.is_phone_verified) {
 
       // Generate and save OTP
-      const otp = "123456";
+      const otp = Helper.generateOtp();
       const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
       user.otp = otp;
@@ -141,7 +142,8 @@ static async login(identifier: string, password: string, dialingCode?: string) {
       await user.save();
 
       // Send SMS
-      await sendSmsOtp(user.phone, otp);
+      const fullPhone = Helper.formatPhoneNumber(user.dialing_code || "91", user.phone);
+      await sendSmsOtp(fullPhone, otp);
 
       // IMPORTANT: RETURN PHONE + DIALING CODE
       return {
@@ -384,29 +386,21 @@ static async changePassword(userId: number, currentPassword: string, newPassword
     if (user.otp_last_sent) {
         const diff = Date.now() - new Date(user.otp_last_sent).getTime();
         if (diff < 30 * 1000) {
-            throw new Error('Please wait 30 seconds before resending OTP');
+            throw new AppError('Please wait 30 seconds before resending OTP', 400);
         }
     }
 
     // Max attempts check
     if (user.otp_attempts >= 3) {
-        // Here we might want to block for longer, but prompt said "max attempts (3)" 
-        // usually implies a block. I will throw an error.
-        // To Reset attempts, user might need to wait or contact support, 
-        // or we just reset after a long expiry? 
-        // For this task, I will block. 
-        // Ideally we reset on successful login or after 1 hour.
-        
-        // Let's implement auto-reset if last attempt was > 1 hour ago
         const lastSent = user.otp_last_sent ? new Date(user.otp_last_sent).getTime() : 0;
         if (Date.now() - lastSent > 60 * 60 * 1000) {
              user.otp_attempts = 0;
         } else {
-             throw new Error('Max OTP attempts reached. Please try again later.');
+             throw new AppError('Max OTP attempts reached. Please try again later.', 400);
         }
     }
 
-    const otp = '123456'; // Hardcoded
+    const otp = Helper.generateOtp();
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
 
     user.otp = otp;
