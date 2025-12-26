@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { Country, State, City, Area, Religion, Caste, Banner, Cms, Package, Category, Config, User, Setting, Thikhana,Enquiry } from '../../models';
+import { Country, State, City, Area, Religion, Caste, Banner, Cms, Package, Category, Config, User, Setting, Thikhana,Enquiry ,Clan} from '../../models';
 import { Op } from 'sequelize';
 import { customConfig } from '../../config/custom';
 
@@ -50,39 +50,61 @@ export class CommonController {
   });
 
   // GET /api/user/common-options - Get all dropdown options
-  static getCommonOptions = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const [religions, castes, countries, states, cities, settings, areas, thikanas] = await Promise.all([
-      Religion.findAll(),
-      Caste.findAll(),
-      Country.findAll(),
-      State.findAll(),
-      City.findAll({ where: { country_id: '101', state_id: '30' } }),
-      Setting.findAll(),
-      Area.findAll(),
-      Thikhana.findAll(),
-    ]);
+  // GET /api/user/common-options - Get all dropdown options
 
-    // Get prefix_id from settings
-    const prefix_id = settings[0]?.prefix_id || 'T';
+  
+ static getCommonOptions = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const [
+    religions,
+    countries,
+    states,
+    cities,
+    settings,
+    areas,
+    thikanas
+  ] = await Promise.all([
+    Religion.findAll({
+      include: [
+        {
+          model: Caste,
+          include: [
+            {
+              model: Clan,
+            },
+          ],
+        },
+      ],
+    }),
+    Country.findAll(),
+    State.findAll(),
+    City.findAll({ where: { country_id: '101', state_id: '30' } }),
+    Setting.findAll(),
+    Area.findAll(),
+    Thikhana.findAll(),
+  ]);
 
-    const options = {
-      prefix_id,
-      gender: customConfig.user.gender,
-      profile: customConfig.user.profile,
-      mat_status: customConfig.user.mat_status,
-      options_type: customConfig.options_type,
-      religion: religions,
-      caste: castes,
-      country: countries,
-      state: states,
-      city: cities,
-      settings: settings,
-      area: areas,
-      thikhana: thikanas,
-    };
+  const prefix_id = settings[0]?.prefix_id || 'T';
 
-    return ResponseHelper.success(res, 'Options retrieved', options);
+  return ResponseHelper.success(res, 'Options retrieved', {
+    prefix_id,
+    gender: customConfig.user.gender,
+    profile: customConfig.user.profile,
+    mat_status: customConfig.user.mat_status,
+    options_type: customConfig.options_type,
+    religion: religions,
+    country: countries,
+    state: states,
+    city: cities,
+    area: areas,
+    thikhana: thikanas,
   });
+});
+
+
+
+
+
+
 
   // GET /api/user/packages - Get active packages
   static getPackages = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -180,6 +202,26 @@ static getCmsPage = asyncHandler(async (req: AuthRequest, res: Response) => {
     if (max_age) where.age[Op.lte] = Number(String(max_age).trim());
   }
 
+  // Mutual block check
+  if (req.userId) {
+    const { BlockProfile } = await import('../../models');
+    const blockedByMe = await BlockProfile.findAll({
+      where: { user_id: req.userId, status: 'Yes' },
+      attributes: ['block_profile_id'],
+      raw: true,
+    });
+    const blockedMe = await BlockProfile.findAll({
+      where: { block_profile_id: req.userId, status: 'Yes' },
+      attributes: ['user_id'],
+      raw: true,
+    });
+    const blockedIds = [
+      ...blockedByMe.map(b => Number(b.block_profile_id)),
+      ...blockedMe.map(b => Number(b.user_id))
+    ];
+    where.id = { [Op.notIn]: [req.userId, ...blockedIds] };
+  }
+
   const { count, rows } = await User.findAndCountAll({
     where,
     include: ['profile', 'religionRelation', 'casteRelation'],
@@ -194,11 +236,32 @@ static getCmsPage = asyncHandler(async (req: AuthRequest, res: Response) => {
   // GET /api/user/serachById - Search user by RYT ID
   static searchByRytId = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { ryt_id } = req.query;
+    const { BlockProfile } = await import('../../models');
+
+    if (!ryt_id) {
+      return ResponseHelper.error(res, 'RYT ID is required', 400);
+    }
+    
     const user = await User.findOne({
       where: { ryt_id, status: 'Active' },
       include: ['profile'],
       attributes: { exclude: ['password'] },
     });
+
+    if (user && req.userId) {
+      // Mutual block check
+      const isBlocked = await BlockProfile.findOne({
+        where: {
+          [Op.or]: [
+            { user_id: req.userId, block_profile_id: user.id, status: 'Yes' },
+            { user_id: user.id, block_profile_id: req.userId, status: 'Yes' }
+          ]
+        }
+      });
+      if (isBlocked) {
+        return ResponseHelper.success(res, 'User not found', null);
+      }
+    }
 
     return ResponseHelper.success(res, user ? 'User found' : 'User not found', user);
   });

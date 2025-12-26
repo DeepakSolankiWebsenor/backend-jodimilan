@@ -22,6 +22,7 @@ router.get('/payment-gateway', OrderController.getPaymentGateways);
 router.post('/user/order/create', OrderController.createOrder);
 router.post('/user/order/Checkout', OrderController.orderCheckout);
 router.get('/user/order/history', OrderController.getOrderHistory);
+router.get('/user/order/details/:orderNumber', OrderController.getOrderByNumber);
 router.post('/user/plansuscribe', OrderController.subscribePackage);
 
 export default router;

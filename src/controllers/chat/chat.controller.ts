@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { Session, Chat, User } from '../../models';
+import { Session, Chat, User, BlockProfile, Wishlist, FriendRequest } from '../../models';
 import { Op } from 'sequelize';
 import { getSocketServer } from '../../socket';
 
@@ -246,6 +246,9 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
     return ResponseHelper.notFound(res, 'Session not found');
   }
 
+  const userId = req.userId!;
+  const friendId = sessionData.user1_id === userId ? sessionData.user2_id : sessionData.user1_id;
+
   let block = sessionData.block;
 
   // 🛠 FIX: If stored as string → convert to {}
@@ -258,11 +261,42 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
     }
   }
 
-  // Set block flag
-  block[req.userId!] = true;
-
+  // Set block flag in session
+  block[userId] = true;
   sessionData.block = block;
   await sessionData.save();
+
+  // 2. Sync with BlockProfile (Profile blocking mechanism)
+  const existingBlock = await BlockProfile.findOne({
+    where: { user_id: userId, block_profile_id: friendId },
+  });
+
+  if (existingBlock) {
+    await existingBlock.update({ status: 'Yes' });
+  } else {
+    await BlockProfile.create({ user_id: userId, block_profile_id: friendId, status: 'Yes' });
+  }
+
+  // 3. Perform cleanup (Wishlist, FriendRequests) - same as profile block
+  // Remove from Wishlist (both ways)
+  await Wishlist.destroy({
+    where: {
+      [Op.or]: [
+        { user_id: userId, user_profile_id: friendId },
+        { user_id: friendId, user_profile_id: userId }
+      ]
+    }
+  });
+
+  // Remove from FriendRequests (both ways)
+  await FriendRequest.destroy({
+    where: {
+      [Op.or]: [
+        { user_id: userId, request_profile_id: friendId },
+        { user_id: friendId, request_profile_id: userId }
+      ]
+    }
+  });
 
   return ResponseHelper.success(res, 'User blocked');
 });
@@ -277,10 +311,19 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
       return ResponseHelper.notFound(res, 'Session not found');
     }
 
+    const userId = req.userId!;
+    const friendId = sessionData.user1_id === userId ? sessionData.user2_id : sessionData.user1_id;
+
     const block = sessionData.block || {};
-    block[req.userId!] = false;
+    block[userId] = false;
     sessionData.block = block;
     await sessionData.save();
+
+    // Sync with BlockProfile
+    await BlockProfile.update(
+      { status: 'No' },
+      { where: { user_id: userId, block_profile_id: friendId } }
+    );
 
     return ResponseHelper.success(res, 'User unblocked');
   });

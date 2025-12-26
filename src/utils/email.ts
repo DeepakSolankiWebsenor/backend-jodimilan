@@ -4,7 +4,7 @@ import { config } from '../config/app';
 const transporter = nodemailer.createTransport({
   host: config.email.host,
   port: config.email.port,
-  secure: false,
+  secure: config.email.port === 465, // True for 465, false for other ports
   auth: {
     user: config.email.user,
     pass: config.email.password,
@@ -12,41 +12,71 @@ const transporter = nodemailer.createTransport({
 });
 
 export class EmailService {
+  /**
+   * Base HTML template for consistent design
+   */
+  private static getBaseTemplate(content: string, title: string): string {
+    const primaryColor = '#8b1d40'; // Jodi Milan brand color
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+          .header { background: ${primaryColor}; padding: 30px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 40px; }
+          .otp-card { background: #fdf2f5; padding: 25px; border-radius: 12px; text-align: center; margin: 20px 0; border: 1px dashed ${primaryColor}; }
+          .otp-code { font-size: 32px; font-weight: 700; letter-spacing: 8px; color: ${primaryColor}; margin: 0; }
+          .button { display: inline-block; padding: 14px 30px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+          .footer { background: #f1f1f1; padding: 20px; text-align: center; font-size: 13px; color: #777; }
+          .social-links { margin-top: 15px; }
+          .social-links a { margin: 0 10px; color: #777; text-decoration: none; font-size: 18px; }
+          p { margin-bottom: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${config.app.name}</h1>
+          </div>
+          <div class="content">
+            <h2 style="color: ${primaryColor}; margin-top: 0;">${title}</h2>
+            ${content}
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} ${config.app.name}. All rights reserved.</p>
+            <p>support@jodimilan.com | www.jodimilan.com</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 
 
-// OTP SEND 
-/**
- * Send OTP verification email
- */
-static async sendOtp(email: string, name: string, otp: string): Promise<boolean> {
-  const subject = `Your OTP Code - ${config.app.name}`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
-      <h2>Hello ${name},</h2>
-      <p>Your One-Time Password (OTP) to verify your account on <strong>${config.app.name}</strong> is:</p>
-      
-      <h1 style="
-        background: #f5f5f5;
-        padding: 12px 20px;
-        border-radius: 8px;
-        display: inline-block;
-        letter-spacing: 8px;
-        font-size: 28px;
-        text-align: center;
-      ">
-        ${otp}
-      </h1>
-
-      <p>This OTP is valid for the next <strong>10 minutes</strong>.</p>
-      <p>If you did not request this, please ignore this email or contact support immediately.</p>
-
+  /**
+   * Send OTP verification email
+   */
+  static async sendOtp(email: string, name: string, otp: string): Promise<boolean> {
+    const subject = `Your Verification Code - ${config.app.name}`;
+    const content = `
+      <p>Hello ${name},</p>
+      <p>Thank you for choosing <strong>${config.app.name}</strong>. Please use the following One-Time Password (OTP) to complete your verification:</p>
+      <div class="otp-card">
+        <h1 class="otp-code">${otp}</h1>
+      </div>
+      <p style="font-size: 14px; color: #666;">This OTP is valid for the next <strong>10 minutes</strong>. For security reasons, do not share this code with anyone.</p>
+      <p>If you did not request this code, please ignore this email.</p>
       <br/>
-      <p>Best regards,<br/>${config.app.name} Team</p>
-    </div>
-  `;
+      <p>Best regards,<br/>The ${config.app.name} Team</p>
+    `;
 
-  return this.send(email, subject, html);
-}
+    return this.send(email, subject, this.getBaseTemplate(content, 'Verify Your Account'));
+  }
 
 
 
@@ -72,49 +102,63 @@ static async sendOtp(email: string, name: string, otp: string): Promise<boolean>
    * Send email verification
    */
   static async sendEmailVerification(email: string, name: string, verificationUrl: string): Promise<boolean> {
-    const subject = 'Email Verification';
-    const html = `
-      <h2>Hello ${name},</h2>
-      <p>Thank you for registering with ${config.app.name}.</p>
-      <p>Please verify your email by clicking the link below:</p>
-      <a href="${verificationUrl}" style="padding: 10px 20px; background: #4CAF50; color: white; text-decoration: none;">Verify Email</a>
-      <p>If you didn't create an account, please ignore this email.</p>
+    const subject = 'Verify Your Email Address';
+    const content = `
+      <p>Hello ${name},</p>
+      <p>Welcome to <strong>${config.app.name}</strong>! We're excited to have you on board.</p>
+      <p>Please confirm your email address to get full access to our matchmaking services:</p>
+      <div style="text-align: center;">
+        <a href="${verificationUrl}" class="button">Verify My Email</a>
+      </div>
+      <p>If the button above doesn't work, copy and paste this link into your browser:</p>
+      <p style="font-size: 13px; color: #888;">${verificationUrl}</p>
+      <p>If you didn't create an account, you can safely ignore this email.</p>
       <br/>
-      <p>Best regards,<br/>${config.app.name} Team</p>
+      <p>Best regards,<br/>The ${config.app.name} Team</p>
     `;
-    return this.send(email, subject, html);
+    return this.send(email, subject, this.getBaseTemplate(content, 'Confirm Registration'));
   }
 
   /**
    * Send password reset email
    */
   static async sendPasswordReset(email: string, name: string, newPassword: string): Promise<boolean> {
-    const subject = 'Password Reset';
-    const html = `
-      <h2>Hello ${name},</h2>
-      <p>Your password has been reset. Your new password is:</p>
-      <h3 style="background: #f5f5f5; padding: 10px; display: inline-block;">${newPassword}</h3>
-      <p>Please login with this password and change it immediately for security reasons.</p>
+    const subject = 'Your Password Has Been Reset';
+    const content = `
+      <p>Hello ${name},</p>
+      <p>Your password for <strong>${config.app.name}</strong> has been reset successfully.</p>
+      <p>Your temporary password is:</p>
+      <div class="otp-card">
+        <h3 style="margin: 0; color: #8b1d40;">${newPassword}</h3>
+      </div>
+      <p><strong>Important:</strong> Please log in and change your password immediately for security purposes.</p>
       <br/>
-      <p>Best regards,<br/>${config.app.name} Team</p>
+      <p>Best regards,<br/>The ${config.app.name} Team</p>
     `;
-    return this.send(email, subject, html);
+    return this.send(email, subject, this.getBaseTemplate(content, 'Password Reset Success'));
   }
 
   /**
    * Send welcome email
    */
   static async sendWelcome(email: string, name: string, rytId: string): Promise<boolean> {
-    const subject = `Welcome to ${config.app.name}`;
-    const html = `
-      <h2>Welcome ${name}!</h2>
-      <p>Thank you for joining ${config.app.name}.</p>
-      <p>Your RYT ID is: <strong>${rytId}</strong></p>
-      <p>You can use this ID to login along with your email or phone number.</p>
+    const subject = `Welcome to the ${config.app.name} Family!`;
+    const content = `
+      <p>Hello ${name},</p>
+      <p>We are thrilled to welcome you to <strong>${config.app.name}</strong>, your trusted partner in finding your perfect life partner.</p>
+      <div class="otp-card" style="border-style: solid;">
+        <p style="margin: 0; font-size: 14px; color: #666;">Your Unique RYT ID</p>
+        <h2 style="margin: 5px 0; color: #8b1d40;">${rytId}</h2>
+      </div>
+      <p>You can use this ID or your registered email/phone to explore matches and start your journey.</p>
+      <div style="text-align: center;">
+        <a href="https://jodimilan.com/Login" class="button">Start Exploring Profiles</a>
+      </div>
+      <p>Happy matchmaking!</p>
       <br/>
-      <p>Happy matchmaking!<br/>${config.app.name} Team</p>
+      <p>Best regards,<br/>The ${config.app.name} Team</p>
     `;
-    return this.send(email, subject, html);
+    return this.send(email, subject, this.getBaseTemplate(content, 'Welcome to Jodi Milan'));
   }
 
   /**
@@ -126,15 +170,18 @@ static async sendOtp(email: string, name: string, otp: string): Promise<boolean>
     packageName: string,
     expiryDate: string
   ): Promise<boolean> {
-    const subject = 'Package Subscription Confirmation';
-    const html = `
-      <h2>Hello ${name},</h2>
-      <p>Your subscription to <strong>${packageName}</strong> has been confirmed.</p>
-      <p>Valid till: <strong>${expiryDate}</strong></p>
-      <p>Thank you for your purchase!</p>
+    const subject = 'Subscription Confirmation - Jodi Milan';
+    const content = `
+      <p>Hello ${name},</p>
+      <p>This is a confirmation that your subscription to the <strong>${packageName}</strong> package has been activated successfully.</p>
+      <div class="otp-card" style="text-align: left; background: #f9f9f9; border: 1px solid #ddd;">
+        <p style="margin: 5px 0;"><strong>Package:</strong> ${packageName}</p>
+        <p style="margin: 5px 0;"><strong>Valid Until:</strong> ${expiryDate}</p>
+      </div>
+      <p>You now have access to premium features to enhance your partner search experience.</p>
       <br/>
-      <p>Best regards,<br/>${config.app.name} Team</p>
+      <p>Thank you for choosing us!<br/>The ${config.app.name} Team</p>
     `;
-    return this.send(email, subject, html);
+    return this.send(email, subject, this.getBaseTemplate(content, 'Subscription Confirmed'));
   }
 }

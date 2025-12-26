@@ -21,6 +21,21 @@ export class SocialController {
       return ResponseHelper.success(res, 'Interest Request already sent to this user');
     }
 
+    // Block check
+    const { BlockProfile } = await import('../../models');
+    const isBlocked = await BlockProfile.findOne({
+      where: {
+        [Op.or]: [
+          { user_id: req.userId!, block_profile_id: request_profile_id, status: 'Yes' },
+          { user_id: request_profile_id, block_profile_id: req.userId!, status: 'Yes' }
+        ]
+      }
+    });
+
+    if (isBlocked) {
+      return ResponseHelper.error(res, 'Cannot send interest to blocked profile', 403);
+    }
+
     const friendRequest = await FriendRequest.create({
       user_id: req.userId!,
       request_profile_id,
@@ -286,6 +301,21 @@ static declineFriendRequest = asyncHandler(async (req: AuthRequest, res: Respons
   // POST /api/user/photo/request/send - Send photo request
   static sendPhotoRequest = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { profile_id } = req.body;
+
+    // Block check
+    const { BlockProfile } = await import('../../models');
+    const isBlocked = await BlockProfile.findOne({
+      where: {
+        [Op.or]: [
+          { user_id: req.userId!, block_profile_id: profile_id, status: 'Yes' },
+          { user_id: profile_id, block_profile_id: req.userId!, status: 'Yes' }
+        ]
+      }
+    });
+
+    if (isBlocked) {
+      return ResponseHelper.error(res, 'Cannot interact with blocked profile', 403);
+    }
 
     const sender = await User.findByPk(req.userId!);
     const recipient = await User.findByPk(profile_id);

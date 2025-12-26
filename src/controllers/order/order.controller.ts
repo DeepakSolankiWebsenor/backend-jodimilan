@@ -173,6 +173,20 @@ export class OrderController {
     return ResponseHelper.success(res, 'Order retrieved', order);
   });
 
+  // GET /api/user/order/details/:orderNumber - Get order by order number
+  static getOrderByNumber = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const order = await Order.findOne({
+      where: { order_number: req.params.orderNumber, user_id: req.userId! },
+      include: ['package', 'paymentOrder'],
+    });
+
+    if (!order) {
+      return ResponseHelper.notFound(res, 'Order not found');
+    }
+
+    return ResponseHelper.success(res, 'Order retrieved', order);
+  });
+
   // POST /api/Order-Status-change - Change order status
   static changeOrderStatus = asyncHandler(async (req: AuthRequest, res: Response) => {
     const { order_id, status } = req.body;

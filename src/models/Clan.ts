@@ -3,20 +3,20 @@ import {
   Column,
   Model,
   DataType,
-  HasMany,
+  ForeignKey,
+  BelongsTo,
 } from 'sequelize-typescript';
 import { Caste } from './Caste';
 
 @Table({
-  tableName: 'religions',
+  tableName: 'clans',
   timestamps: true,
-  underscored: true,
 })
-export class Religion extends Model<Religion> {
+export class Clan extends Model<Clan> {
   @Column({
     type: DataType.BIGINT.UNSIGNED,
-    primaryKey: true,
     autoIncrement: true,
+    primaryKey: true,
   })
   id!: number;
 
@@ -26,7 +26,13 @@ export class Religion extends Model<Religion> {
   })
   name!: string;
 
-  // ✅ THIS IS REQUIRED
-  @HasMany(() => Caste)
-  castes!: Caste[];
+  @ForeignKey(() => Caste)
+  @Column({
+    type: DataType.BIGINT.UNSIGNED,
+    allowNull: false,
+  })
+  caste_id!: number;
+
+  @BelongsTo(() => Caste)
+  caste!: Caste;
 }

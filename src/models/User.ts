@@ -14,6 +14,7 @@ import { Country } from './Country';
 import { State } from './State';
 import { Religion } from './Religion';
 import { Caste } from './Caste';
+import { Clan } from './Clan';
 import { Package } from './Package';
 import { UserAlbum } from './UserAlbum';
 import { BlockProfile } from './BlockProfile';
@@ -116,12 +117,26 @@ export class User extends Model {
   })
   religion!: number;
 
+  @Column({
+    type: DataType.STRING(191),
+    allowNull: true,
+  })
+  religion_name?: string;
+
   @ForeignKey(() => Caste)
   @Column({
     type: DataType.BIGINT,
     allowNull: false,
   })
   caste!: number;
+
+ @ForeignKey(() => Clan)
+@Column({
+  type: DataType.BIGINT.UNSIGNED,
+  allowNull: true,
+})
+clan_id?: number;
+
 
   @ForeignKey(() => Country)
   @Column({
@@ -154,6 +169,24 @@ export class User extends Model {
     allowNull: true,
   })
   profile_photo?: string;
+
+  @Column({
+    type: DataType.STRING(191),
+    allowNull: true,
+  })
+  state_name?: string;
+
+  @Column({
+    type: DataType.STRING(191),
+    allowNull: true,
+  })
+  city_name?: string;
+
+  @Column({
+    type: DataType.STRING(191),
+    allowNull: true,
+  })
+  block_name?: string;
 
   @Column({
     type: DataType.ENUM('Active', 'Deleted', 'Inactive', 'Not Verified'),
@@ -253,11 +286,20 @@ export class User extends Model {
   @BelongsTo(() => State)
   stateRelation?: State;
 
-  @BelongsTo(() => Religion)
-  religionRelation?: Religion;
+  
+@BelongsTo(() => Religion, {
+  foreignKey: 'religion', // users.religion
+  targetKey: 'id',
+})
+religionRelation?: Religion;
+
+
 
   @BelongsTo(() => Caste)
   casteRelation?: Caste;
+
+  @BelongsTo(() => Clan)
+  clanRelation?: Clan;
 
   @BelongsTo(() => Package)
   package?: Package;

@@ -26,7 +26,7 @@ router.get('/customer/search', optionalAuth, CommonController.searchProfiles);
 router.get('/thikhana/search', CommonController.searchThikana);
 router.get('/thikhana-searchByName', CommonController.searchThikanaByName);
 router.get('/thikhana/:id', CommonController.getThikanaById);
-router.get('/serachById', CommonController.searchByRytId);
+router.get('/serachById', optionalAuth, CommonController.searchByRytId);
 router.get('/userprofiles', optionalAuth, ProfileController.getUserProfiles);
 
 // Public auth routes (under /user prefix)
@@ -147,7 +147,7 @@ router.post('/delete/account', ProfileController.deleteAccount);
 router.get('/browseProfile', ProfileController.browseProfiles);
 router.get('/daily/recommendation/profile', ProfileController.getDailyRecommendations);
 
-// Wishlist
+// Wishlistfor
 router.get('/wishlist', ProfileController.getWishlist);
 router.post('/add/wishlist', ProfileController.addToWishlist);
 router.post('/remove/wishlist/:id', ProfileController.removeFromWishlist);

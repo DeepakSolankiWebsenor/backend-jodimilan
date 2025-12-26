@@ -9,6 +9,7 @@ export * from './City';
 export * from './Area';
 export * from './Religion';
 export * from './Caste';
+export * from './Clan';
 export * from './Package';
 export * from './FriendRequest';
 export * from './Wishlist';

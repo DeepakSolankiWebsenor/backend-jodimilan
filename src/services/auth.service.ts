@@ -45,7 +45,9 @@ static async signup(data: any) {
     gender: data.gender,
     mat_status: data.mat_status,
     religion: data.religion,
+    religion_name: data.religion_name,
     caste: data.caste,
+    clan: data.clan,
     country: data.country,
     state: data.state,
     dob: data.dob,
@@ -212,7 +214,7 @@ static async login(identifier: string, password: string, dialingCode?: string) {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError('User account not found', 404);
     }
 
     // Verify OTP
@@ -246,12 +248,12 @@ static async login(identifier: string, password: string, dialingCode?: string) {
   static async verifyPhone(userId: number, otp: string) {
     const isValid = await OtpService.verify(userId, otp);
     if (!isValid) {
-      throw new Error('Invalid or expired OTP');
+      throw new AppError('The OTP entered is invalid or has expired', 400);
     }
 
     const user = await User.findByPk(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError('User account not found', 404);
     }
 
     user.is_phone_verified = true;
@@ -326,7 +328,7 @@ static async login(identifier: string, password: string, dialingCode?: string) {
   static async forgotPassword(email: string) {
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError('Account with this email address not found', 404);
     }
 
     // Generate new random password
@@ -348,10 +350,10 @@ static async login(identifier: string, password: string, dialingCode?: string) {
    */
 static async changePassword(userId: number, currentPassword: string, newPassword: string) {
   const user = await User.findByPk(userId);
-  if (!user) throw new Error("User not found");
+  if (!user) throw new AppError("User account not found", 404);
 
   const passwordMatch = await bcrypt.compare(currentPassword, user.password);
-  if (!passwordMatch) throw new Error("Incorrect current password");
+  if (!passwordMatch) throw new AppError("The current password you entered is incorrect", 400);
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   user.password = hashedPassword;
@@ -379,7 +381,7 @@ static async changePassword(userId: number, currentPassword: string, newPassword
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError('User account not found', 404);
     }
 
     // Cooldown check
