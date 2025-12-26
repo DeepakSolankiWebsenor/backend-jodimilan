@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../types';
 import { ResponseHelper } from '../../utils/response';
 import { asyncHandler } from '../../middlewares/errorHandler';
-import { Country, State, City, Area, Religion, Caste, Banner, Cms, Package, Category, Config, User, Setting, Thikhana,Enquiry ,Clan} from '../../models';
+import { Country, State, City, Area, Religion, Caste, Banner, Cms, Package, Category, Config, User, Setting, Thikhana,Enquiry ,Clan,BlockProfile,UserProfile} from '../../models';
 import { Op } from 'sequelize';
 import { customConfig } from '../../config/custom';
 
@@ -181,57 +181,157 @@ static getCmsPage = asyncHandler(async (req: AuthRequest, res: Response) => {
     return ResponseHelper.success(res, 'Home data retrieved', { banners, packages });
   });
 
+
+
+  
+
   // GET /api/user/customer/search - Global user search
- static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
-  let { gender, mat_status, religion, caste, min_age, max_age, city, page = 1, limit = 20 } = req.query;
+static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
+  let {
+    gender,
+    mat_status,
+    religion,
+    caste,
+    clan,
+    minAge,
+    maxAge,
+    city,
+    page = 1,
+    limit = 20,
+  } = req.query;
 
-  // Normalize camelCase query params
-  min_age = min_age || req.query.minAge;
-  max_age = max_age || req.query.maxAge;
+  console.log('🔍 SEARCH QUERY =>', req.query);
 
-  const where: any = { status: 'Active' };
-  if (gender) where.gender = gender;
-  if (mat_status) where.mat_status = mat_status;
-  if (religion) where.religion = religion;
-  if (caste) where.caste = caste;
-  if (city) where.state = city;
+  /* ================= HELPERS ================= */
+  const cleanString = (val?: any) => {
+    if (typeof val !== 'string') return null;
+    const s = val.trim();
+    return s === '' ? null : s;
+  };
 
-  if (min_age || max_age) {
+  const cleanNumber = (val?: any) => {
+    if (val === undefined || val === null) return null;
+    const s = String(val).trim();
+    if (s === '') return null;
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  };
+
+  /* ================= NORMALIZE ================= */
+  const min_age = cleanNumber(minAge);
+  const max_age = cleanNumber(maxAge);
+
+  /* ================= USERS WHERE ================= */
+  const where: any = {
+    status: 'Active',
+  };
+
+  const genderVal = cleanString(gender);
+  if (genderVal) where.gender = genderVal;
+
+  const matStatusVal = cleanString(mat_status);
+  if (matStatusVal) where.mat_status = matStatusVal;
+
+  const religionVal = cleanNumber(religion);
+  if (religionVal !== null) where.religion = religionVal;
+
+  const casteVal = cleanNumber(caste);
+  if (casteVal !== null) where.caste = casteVal;
+
+  const clanVal = cleanNumber(clan);
+  if (clanVal !== null) where.clan_id = clanVal;
+
+  const cityVal = cleanNumber(city);
+  if (cityVal !== null) where.state = cityVal;
+
+  if (min_age !== null || max_age !== null) {
     where.age = {};
-    if (min_age) where.age[Op.gte] = Number(String(min_age).trim());
-    if (max_age) where.age[Op.lte] = Number(String(max_age).trim());
+    if (min_age !== null) where.age[Op.gte] = min_age;
+    if (max_age !== null) where.age[Op.lte] = max_age;
   }
 
-  // Mutual block check
+  /* ================= BLOCKED + SELF ================= */
   if (req.userId) {
-    const { BlockProfile } = await import('../../models');
-    const blockedByMe = await BlockProfile.findAll({
-      where: { user_id: req.userId, status: 'Yes' },
-      attributes: ['block_profile_id'],
-      raw: true,
-    });
     const blockedMe = await BlockProfile.findAll({
       where: { block_profile_id: req.userId, status: 'Yes' },
       attributes: ['user_id'],
       raw: true,
     });
-    const blockedIds = [
-      ...blockedByMe.map(b => Number(b.block_profile_id)),
-      ...blockedMe.map(b => Number(b.user_id))
-    ];
-    where.id = { [Op.notIn]: [req.userId, ...blockedIds] };
+
+    const blockedMeIds = blockedMe.map(b => Number(b.user_id));
+
+    where.id = {
+      [Op.notIn]: [req.userId, ...blockedMeIds],
+    };
   }
 
+  console.log('🧱 FINAL USER WHERE =>', where);
+
+  /* ================= QUERY (FIXED PART) ================= */
   const { count, rows } = await User.findAndCountAll({
     where,
-    include: ['profile', 'religionRelation', 'casteRelation'],
     limit: Number(limit),
     offset: (Number(page) - 1) * Number(limit),
-    attributes: { exclude: ['password', 'otp'] },
+    distinct: true,
+
+    attributes: {
+      exclude: ['password', 'otp', 'otp_expiry', 'otp_attempts'],
+    },
+
+    include: [
+      {
+        model: UserProfile,
+        as: 'profile',     // MUST match User model @HasOne alias
+        required: false,   // user aaye even if profile missing
+      },
+    ],
   });
 
-  return ResponseHelper.paginated(res, 'Search results', rows, count, Number(page), Number(limit));
+  // Attach is_friend flag if user is logged in
+  let results = rows.map(r => r.get({ plain: true }));
+  if (req.userId) {
+      const { FriendRequest } = await import('../../models');
+      const friends = await FriendRequest.findAll({
+          where: {
+              [Op.or]: [
+                  { user_id: req.userId, status: 'Yes' },
+                  { request_profile_id: req.userId, status: 'Yes' }
+              ]
+          },
+          attributes: ['user_id', 'request_profile_id']
+      });
+
+      const friendIds = new Set(friends.map(f => 
+          f.user_id === req.userId ? Number(f.request_profile_id) : Number(f.user_id)
+      ));
+
+      results = results.map((u: any) => ({
+          ...u,
+          is_friend: friendIds.has(Number(u.id))
+      }));
+  }
+
+  console.log('📊 MATCHED USERS =>', count);
+
+  return ResponseHelper.paginated(
+    res,
+    'Search results',
+    results,
+    count,
+    Number(page),
+    Number(limit)
+  );
 });
+
+
+
+
+
+
+
+
+
+
 
   // GET /api/user/serachById - Search user by RYT ID
   static searchByRytId = asyncHandler(async (req: AuthRequest, res: Response) => {

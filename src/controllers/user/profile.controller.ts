@@ -319,6 +319,7 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
   const userData = user.toJSON() as any;
   userData.shortlist_profile_id = shortlist ? shortlist.id : null;
   userData.friend_request_sent = friendRequest ? (friendRequest.user_id === req.userId && friendRequest.status === 'No') : false;
+  userData.friend_request_received = friendRequest ? (friendRequest.request_profile_id === req.userId && friendRequest.status === 'No') : false;
   userData.friend_request_approved = friendRequest ? friendRequest.status === 'Yes' : false;
 
   // Decide if we reveal full details based on privacy and status
@@ -342,7 +343,7 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
   if (freeAccess) {
     revealDetails = true;
   } else if (isMember) {
-    // Paid access for members who aren't "free" friends
+    // Check if already viewed in history
     const alreadyViewed = await UserViewedProfile.findOne({
       where: {
         viewer_id: req.userId!,
@@ -352,19 +353,9 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
 
     if (alreadyViewed) {
       revealDetails = true;
-    } else if (viewer && viewer.total_profile_view_count > 0) {
-      revealDetails = true;
-      // Update view counts: Decrement remaining, Increment consumed
-      viewer.total_profile_view_count = Number(viewer.total_profile_view_count) - 1;
-      viewer.profile_visit = Number(viewer.profile_visit) + 1;
-      await viewer.save();
-      // Record this view
-      await UserViewedProfile.create({
-        viewer_id: req.userId!,
-        viewed_id: user.id
-      });
-      console.log(`✅ Profile view recorded: User ${req.userId} viewed ${user.ryt_id}. Remaining: ${viewer.total_profile_view_count}, Consumed: ${viewer.profile_visit}`);
     }
+    // Note: Automatic consumption logic removed as per user request.
+    // Consumption now happens only via viewContact button click.
   }
 
   // Mask sensitive info if details are NOT revealed
@@ -397,11 +388,22 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   // GET /api/user/view-contact/:id - View contact (decrements view count)
   static viewContact = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const profileId = parseInt(req.params.id);
     const viewerId = req.userId!;
-    
     const viewer = await User.findByPk(viewerId);
     if (!viewer) return ResponseHelper.error(res, 'User not found');
+
+    const idParam = req.params.id;
+    let targetUser;
+
+    // Handle both numeric ID and RYT ID
+    if (/^\d+$/.test(idParam)) {
+      targetUser = await User.findByPk(idParam, { include: ['profile'] });
+    } else {
+      targetUser = await User.findOne({ where: { ryt_id: idParam }, include: ['profile'] });
+    }
+
+    if (!targetUser) return ResponseHelper.error(res, 'Target user not found');
+    const profileId = targetUser.id;
 
     // Mutual block check
     const isBlocked = await BlockProfile.findOne({
@@ -416,11 +418,6 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
     if (isBlocked) {
       return ResponseHelper.error(res, 'Profile blocked', 404);
     }
-
-    const targetUser = await User.findByPk(profileId, {
-      include: ['profile']
-    });
-    if (!targetUser) return ResponseHelper.error(res, 'Target user not found');
 
     // Check if viewer has a membership
     const isMember = !!viewer.package_id;
@@ -447,7 +444,7 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
     }
 
     if (!isMember && !freeAccess) {
-      return ResponseHelper.error(res, 'without membership and friend not able to see view details', 403);
+      return ResponseHelper.error(res, 'Without membership and friend not able to see view details', 403);
     }
 
     // Check privacy restriction specifically
@@ -463,26 +460,29 @@ static getProfileById = asyncHandler(async (req: AuthRequest, res: Response) => 
       }
     });
 
-    if (!alreadyViewed && !freeAccess) {
-      if (viewer.total_profile_view_count <= 0) {
-        return ResponseHelper.error(res, 'Insufficient profile views. Please upgrade your package.');
-      }
+    if (!alreadyViewed) {
+      if (isMember) {
+        if (viewer.total_profile_view_count <= 0) {
+          return ResponseHelper.error(res, 'Membership profile count limit reached. Please upgrade your package.', 403);
+        }
 
-      // Update view counts: Decrement remaining, Increment consumed
-      viewer.total_profile_view_count = Number(viewer.total_profile_view_count) - 1;
-      viewer.profile_visit = Number(viewer.profile_visit) + 1;
-      await viewer.save();
+        // Update view counts: Decrement remaining, Increment consumed
+        viewer.total_profile_view_count = Number(viewer.total_profile_view_count) - 1;
+        viewer.profile_visit = Number(viewer.profile_visit) + 1;
+        await viewer.save();
+      }
 
       await UserViewedProfile.create({
         viewer_id: viewerId,
         viewed_id: profileId
       });
-      console.log(`✅ viewContact: Recorded view for User ${viewerId} on ${profileId}. Remaining: ${viewer.total_profile_view_count}, Consumed: ${viewer.profile_visit}`);
+      console.log(`✅ viewContact: Recorded view for User ${viewerId} on ${targetUser.ryt_id}. Remaining: ${viewer.total_profile_view_count}, Consumed: ${viewer.profile_visit}`);
     }
 
     return ResponseHelper.success(res, 'Contact viewed', { 
       user: targetUser, 
-      remaining_views: viewer.total_profile_view_count 
+      remaining_views: viewer.total_profile_view_count,
+      profile_visit: viewer.profile_visit
     });
   });
 
@@ -538,20 +538,32 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     page = 1,
     limit = 20,
     caste,
+    clan,
+    religion,
     occupation,
-    state, // thikana_state
-    city,  // thikana_city
+    state,
+    city,
   } = req.query;
 
   console.log('🔍 RAW QUERY PARAMS =>', req.query);
 
   const { offset } = Helper.paginate(Number(page), Number(limit));
 
-  /* ================= USERS WHERE (ONLY CASTE) ================= */
+  /* ================= USERS WHERE ================= */
   const userWhere: any = {
     status: 'Active',
   };
 
+  // ✅ Religion filter
+  if (religion) {
+    const religionIds = Array.isArray(religion)
+      ? religion.map(Number)
+      : [Number(religion)];
+
+    userWhere.religion = { [Op.in]: religionIds };
+  }
+
+  // ✅ Caste filter
   if (caste) {
     const casteIds = Array.isArray(caste)
       ? caste.map(Number)
@@ -560,8 +572,20 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     userWhere.caste = { [Op.in]: casteIds };
   }
 
+  // ✅ Clan filter
+  if (clan) {
+    const clanIds = Array.isArray(clan)
+      ? clan.map(Number)
+      : [Number(clan)];
+
+    userWhere.clan_id = { [Op.in]: clanIds };
+  }
+
   /* ================= BLOCKED + SELF ================= */
+  let friendIds = new Set<number>();
+  
   if (req.userId) {
+    // 1. Blocked Logic
     const blockedByMe = await BlockProfile.findAll({
       where: { user_id: req.userId, status: 'Yes' },
       attributes: ['block_profile_id'],
@@ -576,28 +600,49 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
 
     const blockedIds = [
       ...blockedByMe.map(b => Number(b.block_profile_id)),
-      ...blockedMe.map(b => Number(b.user_id))
+      ...blockedMe.map(b => Number(b.user_id)),
     ];
 
     userWhere.id = {
       [Op.notIn]: [req.userId, ...blockedIds],
     };
+
+    // 2. Fetch Friend IDs (both sent and received where status is 'Yes')
+    const friends = await FriendRequest.findAll({
+      where: {
+        [Op.or]: [
+          { user_id: req.userId, status: 'Yes' },
+          { request_profile_id: req.userId, status: 'Yes' }
+        ]
+      },
+      attributes: ['user_id', 'request_profile_id'],
+      raw: true
+    });
+
+    friends.forEach(f => {
+      if (f.user_id === req.userId) friendIds.add(f.request_profile_id);
+      else friendIds.add(f.user_id);
+    });
   }
 
   console.log('🧱 USER WHERE =>');
   console.dir(userWhere, { depth: null });
 
-  /* ================= USER_PROFILE WHERE (OPTIONAL) ================= */
+  /* ================= USER_PROFILE WHERE ================= */
   const profileWhere: any = {};
 
-  // ✅ FIX 1: occupation column (NOT employeed_in)
+  // ✅ occupation (array-safe)
   if (occupation) {
+    const occupationValue = Array.isArray(occupation)
+      ? occupation[0]
+      : occupation;
+
     profileWhere.occupation = {
-      [Op.like]: `%${occupation}%`,
+      [Op.like]: `%${occupationValue}%`,
     };
   }
 
-  // ✅ FIX 2: thikana filters
+  // ✅ state
   if (state) {
     profileWhere.thikana_state = {
       [Op.in]: Array.isArray(state)
@@ -606,6 +651,7 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     };
   }
 
+  // ✅ city
   if (city) {
     profileWhere.thikana_city = {
       [Op.in]: Array.isArray(city)
@@ -628,7 +674,7 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
       {
         model: UserProfile,
         as: 'profile',
-        required: isProfileFilterApplied, // 🔥 KEY
+        required: isProfileFilterApplied, // 🔥 profile-only search works
         where: isProfileFilterApplied ? profileWhere : undefined,
       },
     ],
@@ -636,8 +682,21 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     offset,
     distinct: true,
     attributes: {
-      exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'],
+      exclude: [
+        'password',
+        'user_password',
+        'otp',
+        'otp_expiry',
+        'otp_attempts',
+      ],
     },
+  });
+
+  // Attach is_friend flag
+  const rowsWithFriendStatus = rows.map(user => {
+    const u = user.toJSON();
+    u.is_friend = friendIds.has(u.id);
+    return u;
   });
 
   console.log('📊 TOTAL USERS =>', count);
@@ -647,12 +706,13 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
   return ResponseHelper.paginated(
     res,
     'Profiles retrieved',
-    rows,
+    rowsWithFriendStatus,
     count,
     Number(page),
     Number(limit)
   );
 });
+
 
 
 
@@ -674,6 +734,8 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     };
 
     // Mutual block check in recommendations
+    let friendIds = new Set<number>();
+
     if (req.userId) {
       const blockedByMe = await BlockProfile.findAll({
         where: { user_id: req.userId, status: 'Yes' },
@@ -695,6 +757,23 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
       where.id = {
         [Op.notIn]: [req.userId, ...blockedIds],
       };
+
+      // Fetch Friend IDs
+      const friends = await FriendRequest.findAll({
+        where: {
+          [Op.or]: [
+            { user_id: req.userId, status: 'Yes' },
+            { request_profile_id: req.userId, status: 'Yes' }
+          ]
+        },
+        attributes: ['user_id', 'request_profile_id'],
+        raw: true
+      });
+
+      friends.forEach(f => {
+        if (f.user_id === req.userId) friendIds.add(f.request_profile_id);
+        else friendIds.add(f.user_id);
+      });
     }
 
     if (preferences.enabled) {
@@ -715,38 +794,71 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
       attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
     });
 
-    return ResponseHelper.success(res, 'Recommendations retrieved', profiles);
+    const profilesWithFriendStatus = profiles.map(user => {
+        const u = user.toJSON();
+        u.is_friend = friendIds.has(u.id);
+        return u;
+    });
+
+    return ResponseHelper.success(res, 'Recommendations retrieved', profilesWithFriendStatus);
   });
 
   // GET /api/user/wishlist - Get wishlist
- static getWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.userId) {
-    return ResponseHelper.error(res, 'Unauthorized', 401);
-  }
+  static getWishlist = asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!req.userId) {
+      return ResponseHelper.error(res, 'Unauthorized', 401);
+    }
 
-  const wishlists = await Wishlist.findAll({
-    where: { user_id: req.userId },
-    order: [['created_at', 'DESC']],
-    include: [
-      {
-        association: 'profileUser',
-        attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
-        include: [
-          {
-            model: UserProfile,
-            as: 'profile',
-            include: ['birthCity', 'birthState', 'birthCountry']
-          },
-          'stateRelation',
-          'casteRelation',
-          'religionRelation'
-        ],
+    const wishlists = await Wishlist.findAll({
+      where: { user_id: req.userId },
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          association: 'profileUser',
+          attributes: { exclude: ['password', 'user_password', 'otp', 'otp_expiry', 'otp_attempts'] },
+          include: [
+            {
+              model: UserProfile,
+              as: 'profile',
+              include: ['birthCity', 'birthState', 'birthCountry']
+            },
+            'stateRelation',
+            'casteRelation',
+            'religionRelation'
+          ],
+        },
+      ],
+    });
+
+    // Fetch Friend IDs for current user
+    let friendIds = new Set<number>();
+    const friends = await FriendRequest.findAll({
+      where: {
+        [Op.or]: [
+          { user_id: req.userId, status: 'Yes' },
+          { request_profile_id: req.userId, status: 'Yes' }
+        ]
       },
-    ],
-  });
+      attributes: ['user_id', 'request_profile_id'],
+      raw: true
+    });
 
-  return ResponseHelper.success(res, 'Wishlist retrieved', wishlists);
-});
+    friends.forEach(f => {
+      if (f.user_id === req.userId) friendIds.add(f.request_profile_id);
+      else friendIds.add(f.user_id);
+    });
+
+    // Attach is_friend to profileUser
+    const wishlistWithFriendStatus = wishlists.map(w => {
+        const item = w.toJSON();
+        if (item.profileUser) {
+            item.profileUser.is_friend = friendIds.has(item.profileUser.id);
+        }
+        return item;
+    });
+
+    return ResponseHelper.success(res, 'Wishlist retrieved', wishlistWithFriendStatus);
+  });
 
 
   // POST /api/user/add/wishlist - Add to wishlist
@@ -841,19 +953,20 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
         }
       });
 
-      // Remove from FriendRequests (both ways)
+      // Remove from FriendRequests (only PENDING requests)
       await FriendRequest.destroy({
         where: {
           [Op.or]: [
             { user_id: user_id, request_profile_id: block_profile_id },
             { user_id: block_profile_id, request_profile_id: user_id }
           ],
-          status: 'No' // Only pending requests? Usually blocking kills everything even if accepted. 
-          // If status is 'Yes', session should also be handled if we want full disconnection.
+          status: 'No' 
         }
       });
 
+      // NOTE: We comment out destruction of accepted friends and sessions so that unblocking restores the friendship.
       // If we want to fully disconnect even accepted friends:
+      /*
       await FriendRequest.destroy({
         where: {
           [Op.or]: [
@@ -873,6 +986,7 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
           ]
         }
       });
+      */
     }
 
     return ResponseHelper.success(res, status === 'Yes' ? 'Profile blocked' : 'Profile unblocked');
@@ -900,16 +1014,23 @@ static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) =>
   console.log('➡️ PAGE:', page, 'LIMIT:', limit);
   console.log('➡️ USER ID:', userId);
 
-  const where: any = { status: 'Active' };
+  /* ================= BASE WHERE ================= */
+  const where: any = {
+    status: 'Active',
+  };
 
   /* ================= BLOCKED + SELF EXCLUDE ================= */
+  let friendIds = new Set<number>();
+
   if (userId) {
+    // Users blocked by me
     const blockedByMe = await BlockProfile.findAll({
       where: { user_id: userId, status: 'Yes' },
       attributes: ['block_profile_id'],
       raw: true,
     });
 
+    // Users who blocked me
     const blockedMe = await BlockProfile.findAll({
       where: { block_profile_id: userId, status: 'Yes' },
       attributes: ['user_id'],
@@ -923,23 +1044,38 @@ static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) =>
 
     console.log('🚫 BLOCKED IDS:', blockedIds);
 
-    where.id = { [Op.notIn]: [userId, ...blockedIds] };
+    // Exclude self + blocked users
+    where.id = {
+      [Op.notIn]: [userId, ...blockedIds],
+    };
+
+    /* ================= FRIEND IDS ================= */
+    const friends = await FriendRequest.findAll({
+      where: {
+        status: 'Yes',
+        [Op.or]: [
+          { user_id: userId },
+          { request_profile_id: userId },
+        ],
+      },
+      attributes: ['user_id', 'request_profile_id'],
+      raw: true,
+    });
+
+    friends.forEach(f => {
+      if (f.user_id === userId) {
+        friendIds.add(f.request_profile_id);
+      } else {
+        friendIds.add(f.user_id);
+      }
+    });
   }
 
-  console.log('\n🧱 USER WHERE CLAUSE:');
+  console.log('\n🧱 FINAL USER WHERE CLAUSE:');
   console.dir(where, { depth: null });
 
   const offset = (Number(page) - 1) * Number(limit);
   console.log('➡️ OFFSET:', offset);
-
-  /* ================= QUERY OPTIONS LOG ================= */
-  console.log('\n⚙️ QUERY OPTIONS:');
-  console.log({
-    order: ['users.created_at DESC', 'users.id DESC'],
-    limit,
-    offset,
-    subQuery: false,
-  });
 
   /* ================= QUERY ================= */
   console.log('\n🚀 EXECUTING Sequelize findAndCountAll...\n');
@@ -951,19 +1087,26 @@ static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) =>
       {
         model: UserProfile,
         as: 'profile',
+        required: false,
         include: ['birthCity', 'birthState', 'birthCountry'],
       },
-      'stateRelation',
-      'casteRelation',
+      {
+        association: 'stateRelation',
+        required: false,
+      },
+      {
+        association: 'casteRelation',
+        required: false,
+      },
     ],
 
-    // 🔥 MOST IMPORTANT FIX
+    // 🔥 VERY IMPORTANT (MySQL + joins)
     subQuery: false,
 
     // 🔥 NEW USERS FIRST → OLD USERS LAST
     order: [
-      [col('User.created_at'), 'DESC'],
-      [col('User.id'), 'DESC'],
+      ['created_at', 'DESC'], // newest first
+      ['id', 'DESC'],         // tie-breaker
     ],
 
     limit: Number(limit),
@@ -976,13 +1119,20 @@ static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) =>
     },
   });
 
-  /* ================= RESULT LOG ================= */
+  /* ================= ATTACH FRIEND FLAG ================= */
+  const rowsWithFriendStatus = rows.map(user => {
+    const u: any = user.toJSON();
+    u.is_friend = friendIds.has(u.id);
+    return u;
+  });
+
+  /* ================= LOG RESULT ORDER ================= */
   console.log('\n📊 TOTAL COUNT:', count);
   console.log(
     '📦 RESULT ORDER (id + created_at):',
-    rows.map(u => ({
+    rowsWithFriendStatus.map(u => ({
       id: u.id,
-      created_at: u.createdAt,
+      created_at: u.created_at,
     }))
   );
 
@@ -991,12 +1141,13 @@ static getUserProfiles = asyncHandler(async (req: AuthRequest, res: Response) =>
   return ResponseHelper.paginated(
     res,
     'User profiles retrieved',
-    rows,
+    rowsWithFriendStatus,
     count,
     Number(page),
     Number(limit)
   );
 });
+
 
   // POST /api/user/plansuscribe - Subscribe to a plan
   static subscribePlan = asyncHandler(async (req: AuthRequest, res: Response) => {

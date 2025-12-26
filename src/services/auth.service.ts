@@ -47,7 +47,7 @@ static async signup(data: any) {
     religion: data.religion,
     religion_name: data.religion_name,
     caste: data.caste,
-    clan: data.clan,
+    clan_id: data.clan,
     country: data.country,
     state: data.state,
     dob: data.dob,

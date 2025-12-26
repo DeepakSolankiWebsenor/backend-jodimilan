@@ -43,8 +43,8 @@ export class ChatController {
         [Op.or]: [{ user1_id: req.userId! }, { user2_id: req.userId! }],
       },
       include: [
-        'user1', 
-        'user2',
+        { association: 'user1', include: ['profile'] },
+        { association: 'user2', include: ['profile'] },
         {
           model: Chat,
           as: 'lastMessage',
@@ -85,11 +85,44 @@ export class ChatController {
           },
         });
 
+        // 🛡 Sync session block with BlockProfile status
+        let blockObj = sessionData.block;
+        if (!blockObj || typeof blockObj !== 'object' || Array.isArray(blockObj)) {
+            blockObj = {};
+        }
+
+        const friendId = friendUser?.id;
+        if (friendId) {
+            // Check if CURRENT user has blocked the friend
+            const iBlocked = await BlockProfile.findOne({
+                where: { user_id: req.userId!, block_profile_id: friendId, status: 'Yes' }
+            });
+            // Check if FRIEND has blocked the current user
+            const theyBlocked = await BlockProfile.findOne({
+                where: { user_id: friendId, block_profile_id: req.userId!, status: 'Yes' }
+            });
+
+            // Update session block object with current real-time status from BlockProfile
+            blockObj[req.userId!] = !!iBlocked;
+            blockObj[friendId] = !!theyBlocked;
+        }
+
+        // Check if actually friends in FriendRequest table
+        const friendship = friendId ? await FriendRequest.findOne({
+            where: {
+                [Op.or]: [
+                    { user_id: req.userId!, request_profile_id: friendId, status: 'Yes' },
+                    { user_id: friendId, request_profile_id: req.userId!, status: 'Yes' }
+                ]
+            }
+        }) : null;
+
         return {
           id: sessionData.id,
           user1_id: sessionData.user1_id,
           user2_id: sessionData.user2_id,
-          block: sessionData.block,
+          block: blockObj,
+          is_friend: !!friendship,
           last_message_id: sessionData.last_message_id,
           last_message_at: sessionData.last_message_at,
           typing_users: sessionData.typing_users,
@@ -142,7 +175,16 @@ export class ChatController {
 
     const toUserId = sessionData.user1_id === req.userId! ? sessionData.user2_id : sessionData.user1_id;
 
-    // Membership check for sender
+    // Check blocked status from session (synchronized with BlockProfile)
+    const blockObj = sessionData.block as any;
+    if (blockObj && typeof blockObj === 'object') {
+        // If THE RECIPIENT has blocked THE SENDER, then sender cannot send.
+        // session.block stores: { [blockerId]: true }
+        if (blockObj[toUserId] === true) {
+            return ResponseHelper.error(res, "Cannot send message. You have been blocked by this user.", 403);
+        }
+    }
+ // Membership check for sender
     const sender = await User.findByPk(req.userId!);
     if (!sender?.package_id) {
       return ResponseHelper.error(res, "without membership not able to see view details", 403);
@@ -251,24 +293,30 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   let block = sessionData.block;
 
-  // 🛠 FIX: If stored as string → convert to {}
-  if (!block || typeof block === "string") {
-    try {
-      block = JSON.parse(block);
-      if (!block || typeof block !== "object") block = {};
-    } catch {
-      block = {};
-    }
+  // 🛠 FIX: Ensure block is an object
+  if (!block || typeof block !== 'object' || Array.isArray(block)) {
+      try {
+          if (typeof block === 'string') {
+              block = JSON.parse(block);
+          }
+          if (!block || typeof block !== 'object' || Array.isArray(block)) {
+              block = {};
+          }
+      } catch {
+          block = {};
+      }
   }
 
   // Set block flag in session
   block[userId] = true;
   sessionData.block = block;
+  // Specifically mark as changed for JSON columns if needed, though usually standard sets work
+  sessionData.changed('block', true);
   await sessionData.save();
 
   // 2. Sync with BlockProfile (Profile blocking mechanism)
   const existingBlock = await BlockProfile.findOne({
-    where: { user_id: userId, block_profile_id: friendId },
+      where: { user_id: userId, block_profile_id: friendId },
   });
 
   if (existingBlock) {
@@ -294,7 +342,8 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
       [Op.or]: [
         { user_id: userId, request_profile_id: friendId },
         { user_id: friendId, request_profile_id: userId }
-      ]
+      ],
+      status: 'No'
     }
   });
 
@@ -314,9 +363,13 @@ static blockUser = asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
     const friendId = sessionData.user1_id === userId ? sessionData.user2_id : sessionData.user1_id;
 
-    const block = sessionData.block || {};
+    let block = sessionData.block;
+    if (!block || typeof block !== 'object' || Array.isArray(block)) {
+        block = {};
+    }
     block[userId] = false;
     sessionData.block = block;
+    sessionData.changed('block', true);
     await sessionData.save();
 
     // Sync with BlockProfile
