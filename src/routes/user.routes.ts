@@ -9,6 +9,10 @@ import { uploadMultiple, uploadSingle } from '../middlewares/upload';
 import { Notification } from '../models';
 import { ResponseHelper } from '../utils/response';
 import { User } from '../models';
+import { Op } from 'sequelize';
+import multer from 'multer';
+
+const upload = multer(); // for multipart/form-data
 
 const router = Router();
 
@@ -48,12 +52,107 @@ import { OtpService } from '../utils/otp';
 // Authenticated routes
 router.use(authenticate);
 
-// OTP creation
+// OTP creation with SMS sending
+
+
+
+
 router.post('/create/otp', async (req: any, res) => {
-  const { OtpService } = await import('../utils/otp');
-  const otp = await OtpService.saveOtp(req.userId);
-  return ResponseHelper.success(res, 'OTP created', { otp: otp.otp });
+  try {
+    const { OtpService } = await import('../utils/otp');
+    const { sendSmsOtp } = await import('../utils/sendSmsOtp');
+    const { Helper } = await import('../utils/helper');
+
+    let { phone, dialing_code } = req.body;
+
+    /* ================= PHONE REQUIRED ================= */
+    if (!phone || String(phone).trim() === '') {
+      return ResponseHelper.error(
+        res,
+        'Please enter a new mobile number',
+        400
+      );
+    }
+
+    /* ================= FIND CURRENT USER ================= */
+    const user = await User.findByPk(req.userId);
+    if (!user) {
+      return ResponseHelper.error(res, 'User not found', 404);
+    }
+
+    /* ================= NORMALIZE ================= */
+    const targetPhone = String(phone).trim();
+    const targetDialingCode = String(
+      dialing_code || user.dialing_code || '91'
+    ).trim();
+
+    const currentPhone = String(user.phone).trim();
+    const currentDialingCode = String(user.dialing_code).trim();
+
+    console.log('📞 OTP REQUEST =>', {
+      userId: req.userId,
+      targetPhone,
+      currentPhone,
+      targetDialingCode,
+    });
+
+    /* ================= SAME NUMBER CHECK ================= */
+    if (
+      targetPhone === currentPhone &&
+      targetDialingCode === currentDialingCode
+    ) {
+      return ResponseHelper.error(
+        res,
+        'This mobile number is already your registered number',
+        400
+      );
+    }
+
+    /* ================= DUPLICATE PHONE CHECK ================= */
+    const existingUser = await User.findOne({
+      where: {
+        phone: targetPhone,
+        dialing_code: targetDialingCode,
+        id: { [Op.ne]: req.userId }, // exclude current user
+        status: { [Op.in]: ['Active', 'Not Verified'] },
+      },
+    });
+
+    if (existingUser) {
+      return ResponseHelper.error(
+        res,
+        'This mobile number is already registered with another account',
+        409
+      );
+    }
+
+    /* ================= GENERATE OTP ================= */
+    const otpData = await OtpService.saveOtp(req.userId);
+    console.log('🔐 OTP GENERATED');
+
+    /* ================= SEND OTP ================= */
+    const fullPhone = Helper.formatPhoneNumber(
+      targetDialingCode,
+      targetPhone
+    );
+
+    console.log('📱 Sending OTP to:', fullPhone);
+    await sendSmsOtp(fullPhone, otpData.otp);
+
+    return ResponseHelper.success(
+      res,
+      'OTP sent successfully to your mobile number'
+    );
+  } catch (error: any) {
+    console.error('❌ OTP CREATE ERROR:', error);
+    return ResponseHelper.error(
+      res,
+      error.message || 'Failed to send OTP',
+      500
+    );
+  }
 });
+
 
 
 router.post('/verify/mobile-otp', authenticate, async (req: any, res) => {
@@ -85,11 +184,89 @@ router.post('/verify/mobile-otp', authenticate, async (req: any, res) => {
 
 
 
-router.post('/create/otp/email', async (req: any, res) => {
-  const { OtpService } = await import('../utils/otp');
-  const otp = await OtpService.saveOtp(req.userId);
-  return ResponseHelper.success(res, 'OTP created for email', { otp: otp.otp });
-});
+// Email OTP creation with duplicate check and email sending
+router.post(
+  '/create/otp/email',
+  upload.none(), // ✅ IMPORTANT: handles FormData
+  async (req: any, res) => {
+    try {
+      const { OtpService } = await import('../utils/otp');
+      const { EmailService } = await import('../utils/email');
+
+      const email = req.body?.email;
+
+      console.log('REQ BODY =>', req.body);
+
+      /* ================= EMAIL REQUIRED CHECK ================= */
+      if (!email) {
+        return ResponseHelper.error(res, 'Email is required', 400);
+      }
+
+      /* ================= FIND CURRENT USER ================= */
+      const user = await User.findByPk(req.userId);
+      if (!user) {
+        return ResponseHelper.error(res, 'User not found', 404);
+      }
+
+      const targetEmail = String(email).trim().toLowerCase();
+      const currentEmail = String(user.email).trim().toLowerCase();
+
+      console.log('📧 EMAIL OTP REQUEST =>', {
+        userId: req.userId,
+        targetEmail,
+      });
+
+      /* ================= SAME EMAIL CHECK ================= */
+      if (targetEmail === currentEmail) {
+        return ResponseHelper.error(
+          res,
+          'This email address is already your registered email',
+          400
+        );
+      }
+
+      /* ================= DUPLICATE EMAIL CHECK ================= */
+      const existingUser = await User.findOne({
+        where: {
+          email: targetEmail,
+          id: { [Op.ne]: req.userId }, // exclude current user
+          status: {
+            [Op.in]: ['Active', 'Not Verified'],
+          },
+        },
+      });
+
+      if (existingUser) {
+        return ResponseHelper.error(
+          res,
+          'This email address is already registered with another account',
+          409
+        );
+      }
+
+      /* ================= GENERATE OTP ================= */
+      const otpData = await OtpService.saveOtp(req.userId);
+      console.log('🔐 EMAIL OTP GENERATED');
+
+      /* ================= SEND EMAIL ================= */
+      await EmailService.sendOtp(targetEmail, user.name, otpData.otp);
+      console.log('📧 OTP SENT TO EMAIL:', targetEmail);
+
+      return ResponseHelper.success(
+        res,
+        'OTP sent successfully to your email address'
+      );
+    } catch (error: any) {
+      console.error('❌ EMAIL OTP CREATE ERROR:', error);
+      return ResponseHelper.error(
+        res,
+        error.message || 'Failed to send OTP',
+        500
+      );
+    }
+  }
+);
+
 
 
 router.post("/verify/email-otp", authenticate, async (req: any, res) => {

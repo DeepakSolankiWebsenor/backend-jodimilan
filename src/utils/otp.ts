@@ -7,14 +7,10 @@ export class OtpService {
    * Generate random OTP
    */
   static generate(length: number = config.otp.length): string {
-    // In production, generate random OTP
-    // In test/dev, use fixed OTP for testing
-    if (config.app.env === 'production') {
-      const min = Math.pow(10, length - 1);
-      const max = Math.pow(10, length) - 1;
-      return Math.floor(min + Math.random() * (max - min + 1)).toString();
-    }
-    return '123456'; // Fixed for testing
+    // Always generate random OTP
+    const min = Math.pow(10, length - 1);
+    const max = Math.pow(10, length) - 1;
+    return Math.floor(min + Math.random() * (max - min + 1)).toString();
   }
 
   /**

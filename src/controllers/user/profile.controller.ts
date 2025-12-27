@@ -809,9 +809,15 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
       return ResponseHelper.error(res, 'Unauthorized', 401);
     }
 
-    const wishlists = await Wishlist.findAll({
+    const { page = 1, limit = 10 } = req.query;
+    const { offset } = Helper.paginate(Number(page), Number(limit));
+
+    const { count, rows: wishlists } = await Wishlist.findAndCountAll({
       where: { user_id: req.userId },
       order: [['created_at', 'DESC']],
+      limit: Number(limit),
+      offset,
+      distinct: true,
       include: [
         {
           association: 'profileUser',
@@ -857,7 +863,14 @@ static browseProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
         return item;
     });
 
-    return ResponseHelper.success(res, 'Wishlist retrieved', wishlistWithFriendStatus);
+    return ResponseHelper.paginated(
+      res,
+      'Wishlist retrieved',
+      wishlistWithFriendStatus,
+      count,
+      Number(page),
+      Number(limit)
+    );
   });
 
 

@@ -82,7 +82,10 @@ export class SocialController {
 
   // GET /api/user/auth/user/friend/requests - Get received friend requests
   static getReceivedRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const requests = await FriendRequest.findAll({
+    const { page = 1, limit = 10 } = req.query;
+    const { offset } = Helper.paginate(Number(page), Number(limit));
+
+    const { count, rows: requests } = await FriendRequest.findAndCountAll({
       where: { request_profile_id: req.userId!, status: 'No' },
       include: [
         {
@@ -101,9 +104,12 @@ export class SocialController {
         },
       ],
       order: [['created_at', 'DESC']],
+      limit: Number(limit),
+      offset,
+      distinct: true,
     });
 
-    return ResponseHelper.success(res, 'Friend requests retrieved', requests);
+    return ResponseHelper.paginated(res, 'Friend requests retrieved', requests, count, Number(page), Number(limit));
   });
 
   // POST /api/user/friend/requests/accept - Accept friend request
@@ -201,7 +207,10 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
 
   // GET /api/user/friend/requests/accepted - Get accepted requests (friends)
   static getAcceptedRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const sent = await FriendRequest.findAll({
+    const { page = 1, limit = 10 } = req.query;
+    const { offset } = Helper.paginate(Number(page), Number(limit));
+
+    const { count: sentCount, rows: sent } = await FriendRequest.findAndCountAll({
       where: { user_id: req.userId!, status: 'Yes' },
       include: [
         {
@@ -219,9 +228,12 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
           ],
         },
       ],
+      limit: Number(limit),
+      offset,
+      distinct: true,
     });
 
-    const received = await FriendRequest.findAll({
+    const { count: receivedCount, rows: received } = await FriendRequest.findAndCountAll({
       where: { request_profile_id: req.userId!, status: 'Yes' },
       include: [
         {
@@ -239,14 +251,22 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
           ],
         },
       ],
+      limit: Number(limit),
+      offset,
+      distinct: true,
     });
 
-    return ResponseHelper.success(res, 'Friends retrieved', { sent, received });
+    const total = Math.max(sentCount, receivedCount); // Total for pagination purposes in this double list
+
+    return ResponseHelper.paginated(res, 'Friends retrieved', { sent, received }, total, Number(page), Number(limit));
   });
 
   // GET /api/user/friend/requests/pending - Get pending sent requests
   static getPendingRequests = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const requests = await FriendRequest.findAll({
+    const { page = 1, limit = 10 } = req.query;
+    const { offset } = Helper.paginate(Number(page), Number(limit));
+
+    const { count, rows: requests } = await FriendRequest.findAndCountAll({
       where: { user_id: req.userId!, status: 'No' },
       include: [
         {
@@ -265,9 +285,12 @@ static acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Response
         }
       ],
       order: [['created_at', 'DESC']],
+      limit: Number(limit),
+      offset,
+      distinct: true,
     });
 
-    return ResponseHelper.success(res, 'Pending requests retrieved', requests);
+    return ResponseHelper.paginated(res, 'Pending requests retrieved', requests, count, Number(page), Number(limit));
   });
 
   // POST /api/user/friend/requests/decline - Decline friend request

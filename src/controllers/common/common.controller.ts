@@ -251,6 +251,7 @@ static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
   }
 
   /* ================= BLOCKED + SELF ================= */
+  let blockedByMeIds: number[] = [];
   if (req.userId) {
     const blockedMe = await BlockProfile.findAll({
       where: { block_profile_id: req.userId, status: 'Yes' },
@@ -259,6 +260,14 @@ static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     });
 
     const blockedMeIds = blockedMe.map(b => Number(b.user_id));
+
+    // Also get people I've blocked to flag them in search results (asymmetrical blocking)
+    const blockedByMe = await BlockProfile.findAll({
+      where: { user_id: req.userId, status: 'Yes' },
+      attributes: ['block_profile_id'],
+      raw: true,
+    });
+    blockedByMeIds = blockedByMe.map(b => Number(b.block_profile_id));
 
     where.id = {
       [Op.notIn]: [req.userId, ...blockedMeIds],
@@ -307,7 +316,8 @@ static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
 
       results = results.map((u: any) => ({
           ...u,
-          is_friend: friendIds.has(Number(u.id))
+          is_friend: friendIds.has(Number(u.id)),
+          is_blocked: blockedByMeIds.includes(Number(u.id))
       }));
   }
 
@@ -349,17 +359,23 @@ static searchProfiles = asyncHandler(async (req: AuthRequest, res: Response) => 
     });
 
     if (user && req.userId) {
-      // Mutual block check
-      const isBlocked = await BlockProfile.findOne({
-        where: {
-          [Op.or]: [
-            { user_id: req.userId, block_profile_id: user.id, status: 'Yes' },
-            { user_id: user.id, block_profile_id: req.userId, status: 'Yes' }
-          ]
-        }
+      // 1. Check if they blocked me (if they blocked me, hide them entirely)
+      const theyBlockedMe = await BlockProfile.findOne({
+        where: { user_id: user.id, block_profile_id: req.userId, status: 'Yes' }
       });
-      if (isBlocked) {
+      if (theyBlockedMe) {
         return ResponseHelper.success(res, 'User not found', null);
+      }
+
+      // 2. Check if I blocked them (if I blocked them, return user but with is_blocked flag)
+      const iBlockedThem = await BlockProfile.findOne({
+        where: { user_id: req.userId, block_profile_id: user.id, status: 'Yes' }
+      });
+      
+      if (iBlockedThem) {
+        const userData = user.get({ plain: true }) as any;
+        userData.is_blocked = true;
+        return ResponseHelper.success(res, 'User found', userData);
       }
     }
 
